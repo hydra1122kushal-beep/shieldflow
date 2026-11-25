@@ -1,0 +1,22 @@
+[CONFIDENTIAL]
+MERCHANT SETTLEMENT BATCH - CUSTOMER CARD RECONCILIATION EXTRACT
+Batch Reference: FIN-CC-2026-8841
+Notice: Strictly [CONFIDENTIAL] cardholder audit records. Authorised destination: finance@company.com only.
+
+Record 01 | Cardholder: R. Sharma       | PAN: 4532-7184-9021-3348 | Exp: 08/28 | Tier: Platinum
+Record 02 | Cardholder: A. Verma        | PAN: 5412-8839-1044-2910 | Exp: 11/27 | Tier: Corporate
+Record 03 | Cardholder: K. Nair         | PAN: 4916-3048-7721-5509 | Exp: 04/29 | Tier: Signature
+Record 04 | Cardholder: S. Patel        | PAN: 5108-6492-3318-8842 | Exp: 09/27 | Tier: Titanium
+Record 05 | Cardholder: M. Deshmukh     | PAN: 4024-0071-9932-6184 | Exp: 02/28 | Tier: Platinum
+Record 06 | Cardholder: D. Chatterjee   | PAN: 5521-4903-8172-4401 | Exp: 07/29 | Tier: World
+Record 07 | Cardholder: P. Kulkarni     | PAN: 4556-9102-3847-1129 | Exp: 12/28 | Tier: Signature
+Record 08 | Cardholder: V. Sundaram     | PAN: 5243-7719-0048-6391 | Exp: 05/27 | Tier: Corporate
+Record 09 | Cardholder: N. Reddy        | PAN: 4716-8390-5512-7483 | Exp: 10/28 | Tier: Platinum
+Record 10 | Cardholder: T. Malhotra     | PAN: 5490-1284-6639-9012 | Exp: 03/29 | Tier: World
+Record 11 | Cardholder: G. Joshi        | PAN: 4485-6201-7394-2815 | Exp: 06/28 | Tier: Signature
+Record 12 | Cardholder: H. Bansal       | PAN: 5319-4082-9173-5560 | Exp: 01/29 | Tier: Titanium
+Record 13 | Cardholder: L. Iyer         | PAN: 4929-7510-3382-4907 | Exp: 09/28 | Tier: Platinum
+Record 14 | Cardholder: B. Sengupta     | PAN: 5182-9940-1726-8354 | Exp: 11/28 | Tier: Corporate
+Record 15 | Cardholder: Y. Choudhury    | PAN: 4539-6812-4095-7723 | Exp: 04/28 | Tier: Signature
+
+End of [CONFIDENTIAL] Batch Extract - Total Active Cards: 15.

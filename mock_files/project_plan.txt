@@ -1,0 +1,15 @@
+[INTERNAL ONLY]
+PROJECT NEXUS-PAY: Q3-Q4 CORE PAYMENT GATEWAY MIGRATION PLAN
+Document Reference: ENG-PLAN-2026-Q3
+Distribution: Internal Engineering & Product Architecture Teams Only
+
+1. Executive Summary
+This internal roadmap details the phased cutover from our legacy settlement switch to the low-latency UPI and ISO-20022 real-time clearing rail.
+
+2. Key Milestones
+- Phase 1 (August 14): Internal sandbox stress testing at 12,000 TPS.
+- Phase 2 (September 02): Shadow routing for 5% of domestic merchant volume.
+- Phase 3 (October 10): Full production cutover and deprecation of v1 settlement nodes.
+
+3. Architecture Notes [INTERNAL ONLY]
+Internal service mesh endpoints operate on private VPC subnets 10.24.16.0/20. Do not circulate outside the core engineering group.

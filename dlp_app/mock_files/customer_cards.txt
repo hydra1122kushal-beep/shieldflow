@@ -1,0 +1,19 @@
+[CONFIDENTIAL]
+MERCHANT SETTLEMENT BATCH - CUSTOMER CARD RECONCILIATION EXTRACT
+Authorised destination: finance@company.com
+
+Record 01 | R. Sharma | PAN: 4532-7184-9021-3348 | Exp: 08/28
+Record 02 | A. Verma | PAN: 5412-8839-1044-2910 | Exp: 11/27
+Record 03 | K. Nair | PAN: 4916-3048-7721-5509 | Exp: 04/29
+Record 04 | S. Patel | PAN: 5108-6492-3318-8842 | Exp: 09/27
+Record 05 | M. Deshmukh | PAN: 4024-0071-9932-6184 | Exp: 02/28
+Record 06 | D. Chatterjee | PAN: 5521-4903-8172-4401 | Exp: 07/29
+Record 07 | P. Kulkarni | PAN: 4556-9102-3847-1129 | Exp: 12/28
+Record 08 | V. Sundaram | PAN: 5243-7719-0048-6391 | Exp: 05/27
+Record 09 | N. Reddy | PAN: 4716-8390-5512-7483 | Exp: 10/28
+Record 10 | T. Malhotra | PAN: 5490-1284-6639-9012 | Exp: 03/29
+Record 11 | G. Joshi | PAN: 4485-6201-7394-2815 | Exp: 06/28
+Record 12 | H. Bansal | PAN: 5319-4082-9173-5560 | Exp: 01/29
+Record 13 | L. Iyer | PAN: 4929-7510-3382-4907 | Exp: 09/28
+Record 14 | B. Sengupta | PAN: 5182-9940-1726-8354 | Exp: 11/28
+Record 15 | Y. Choudhury | PAN: 4539-6812-4095-7723 | Exp: 04/28

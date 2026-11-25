@@ -1,0 +1,8 @@
+[INTERNAL ONLY]
+PROJECT NEXUS-PAY: Q3-Q4 CORE PAYMENT GATEWAY MIGRATION PLAN
+Distribution: Internal Engineering Teams Only
+
+1. Executive Summary
+Phased cutover from legacy settlement switch to low-latency UPI and ISO-20022 rail.
+2. Architecture Notes [INTERNAL ONLY]
+Private VPC subnets 10.24.16.0/20. Do not circulate externally.

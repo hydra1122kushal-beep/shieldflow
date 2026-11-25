@@ -1,0 +1,8 @@
+{
+  "name": "Remix SentinelDLP — Avishkar\u002726 PS-17 Data Exfiltration Detection \u0026 Prevention",
+  "description": "Explainable Data Loss Prevention (DLP) prototype monitoring Email and USB channels with regex PII/tag inspection, behavioral volume baselines, quarantine triage, and multi-modal alerts with mobile vibration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

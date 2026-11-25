@@ -1,0 +1,21 @@
+[FINANCIAL_DATA]
+Q3 CORPORATE TREASURY DISBURSEMENT & WIRE SETTLEMENT LEDGER
+Document ID: FIN-TREASURY-2026-Q3
+Classification: [FINANCIAL_DATA] - Restricted to Corporate Finance (finance@company.com)
+
+1. Institutional Settlement Accounts & ABA Routing Instructions
+------------------------------------------------------------------------------------------
+Counterparty: Apex Clearing Custody      | Acct#: ACCT-8849201143 | Routing#: ABA-021000021 | Amount: $1,420,000.00
+Counterparty: Horizon Liquidity Partners | Acct#: ACCT-7730194822 | Routing#: ABA-026009593 | Amount: $890,500.00
+Counterparty: Meridian Prime Brokerage   | Acct#: ACCT-9910482736 | Routing#: ABA-121000248 | Amount: $2,150,000.00
+Counterparty: Crestview Escrow Services  | Acct#: ACCT-6648291054 | Routing#: ABA-071000013 | Amount: $640,250.00
+Counterparty: Vanguard Settlement Vault  | Acct#: ACCT-5501928374 | Routing#: ABA-031100209 | Amount: $3,110,800.00
+Counterparty: Sterling FX Reserve        | Acct#: ACCT-4492817365 | Routing#: ABA-111000025 | Amount: $975,000.00
+Counterparty: Pacific Bullion Clearing   | Acct#: ACCT-3381726490 | Routing#: ABA-122000247 | Amount: $1,840,000.00
+Counterparty: Atlas Institutional Trust  | Acct#: ACCT-2293847561 | Routing#: ABA-011000015 | Amount: $1,205,400.00
+Counterparty: Zenith Capital Treasury    | Acct#: ACCT-1182736455 | Routing#: ABA-053000196 | Amount: $760,900.00
+Counterparty: Beacon Reserve Depository  | Acct#: ACCT-9081726354 | Routing#: ABA-061000104 | Amount: $1,530,000.00
+
+2. Liquidity Summary [FINANCIAL_DATA]
+Total Quarterly Outbound Wire Volume: $14,522,850.00 across 10 primary settlement accounts.
+Unauthorized duplication or transmission outside finance@company.com is strictly prohibited.

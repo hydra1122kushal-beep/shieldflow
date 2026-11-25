@@ -1,0 +1,12 @@
+[CONFIDENTIAL]
+HUMAN RESOURCES MASTER PAYROLL & IDENTITY REGISTER
+Restricted to: hr@company.com
+
+EmpID: E-1041 | Name: Aditya Kulkarni | SSN: 418-72-9041 | Phone: +1-415-890-2341 | Email: aditya.k@company.com
+EmpID: E-1042 | Name: Sneha Iyer | SSN: 529-48-1132 | Phone: +1-415-890-2342 | Email: sneha.iyer@company.com
+EmpID: E-1043 | Name: Vikram Singhania | SSN: 304-91-7764 | Phone: +1-415-890-2343 | Email: v.singhania@company.com
+EmpID: E-1044 | Name: Ananya P. | SSN: 617-33-8520 | Phone: +1-415-890-2344 | Email: ananya.p@company.com
+EmpID: E-1045 | Name: Siddharth C. | SSN: 289-65-4419 | Phone: +1-415-890-2345 | Email: siddharth.c@company.com
+EmpID: E-1046 | Name: Divya Subramanian | SSN: 742-19-3087 | Phone: +1-415-890-2346 | Email: divya.s@company.com
+EmpID: E-1047 | Name: Karthikeya Nambiar | SSN: 815-40-6293 | Phone: +1-415-890-2347 | Email: karthik.n@company.com
+EmpID: E-1048 | Name: Pooja C. | SSN: 193-84-5501 | Phone: +1-415-890-2348 | Email: pooja.c@company.com

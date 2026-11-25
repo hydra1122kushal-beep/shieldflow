@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #f6faf7;
+    color: #0d2116;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono, code, pre, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes dlpAlertFlash {
+  0%, 100% {
+    background-color: #b91c1c;
+    border-color: #fca5a5;
+    box-shadow: 0 10px 28px -6px rgba(185, 28, 28, 0.45);
+  }
+  50% {
+    background-color: #dc2626;
+    border-color: #ffffff;
+    box-shadow: 0 14px 36px -4px rgba(220, 38, 38, 0.65);
+  }
+}
+
+.dlp-flashing-banner {
+  animation: dlpAlertFlash 0.85s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dlp-flashing-banner {
+    animation: none;
+    background-color: #b91c1c;
+    border-color: #fca5a5;
+  }
+}
