@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { AnalystProfile, MOCK_EMPLOYEES, resolveUsbDeviceMetadata } from '../data/mockFiles';
-import { DLPActionTier, DLPEvaluationResult } from '../utils/dlpEngine';
+import {
+  AnalystProfile,
+  MOCK_EMPLOYEES,
+  USB_DEVICES,
+  resolveUsbDeviceMetadata,
+} from '../data/mockFiles';
+import {
+  DLPActionTier,
+  DLPEvaluationResult,
+  computeLiveEventScore,
+} from '../utils/dlpEngine';
 import { FlashingAlertBanner } from './FlashingAlertBanner';
 import {
   CheckCircle2,
@@ -20,6 +29,8 @@ import {
   Monitor,
   HardDrive,
   AlertOctagon,
+  Smartphone,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface AnalystDashboardProps {
@@ -98,7 +109,9 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
   const reviewCount = events.filter((e) => e.tier === 'REVIEW').length;
   const allowCount = events.filter((e) => e.tier === 'ALLOW').length;
 
-  // All Blocked USB Insertion Attempts (Commercial / Unauthorised Pen Drives)
+  const authorisedMobileDevice = USB_DEVICES[0];
+
+  // All Blocked USB Insertion Attempts (Unauthorised USB Devices)
   const blockedUsbEvents = useMemo(() => {
     return events.filter((e) => e.channel === 'USB' && e.tier === 'BLOCK');
   }, [events]);
@@ -219,10 +232,10 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, rotateX: 3, y: 12 }}
-      animate={{ opacity: 1, rotateX: 0, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="space-y-6 perspective-stage"
+      initial={{ opacity: 0, scale: 0.93 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+      className="space-y-6"
     >
       {latestAlert && latestAlert.shouldAlertAndVibrate && (
         <FlashingAlertBanner
@@ -233,7 +246,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
         />
       )}
 
-      {/* Analyst Header + 4-Column Color-Graded KPI Row */}
+      {/* Analyst Header + 4-Column Blow-Up KPI Row */}
       <div className="rounded-xl border border-indigo-950/12 bg-gradient-to-r from-white via-indigo-50/40 to-rose-50/35 p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 card-3d-subtle">
         <div>
           <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
@@ -251,15 +264,30 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono tabular-nums">
-          <div className="px-4 py-2.5 rounded-lg bg-white border border-indigo-200/80 shadow-2xs">
+          <motion.div
+            whileHover={{ scale: 1.06, y: -3 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 20 }}
+            className="px-4 py-2.5 rounded-lg bg-white border border-indigo-200/80 shadow-2xs cursor-pointer"
+            onClick={() => setTierFilter('ALL')}
+          >
             <div className="text-xs font-sans text-indigo-700 font-medium">Total Events</div>
             <div className="text-xl font-bold text-slate-950">{events.length}</div>
-          </div>
-          <div className="px-4 py-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200">
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.06, y: -3 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 20 }}
+            className="px-4 py-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 cursor-pointer"
+            onClick={() => setTierFilter('ALLOW')}
+          >
             <div className="text-xs font-sans text-emerald-800 font-medium">Allowed (0–30)</div>
             <div className="text-xl font-bold text-emerald-800">{allowCount}</div>
-          </div>
-          <div className="px-4 py-2.5 rounded-lg bg-amber-50/80 border border-amber-200">
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.06, y: -3 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 20 }}
+            className="px-4 py-2.5 rounded-lg bg-amber-50/80 border border-amber-200 cursor-pointer"
+            onClick={() => setTierFilter('REVIEW')}
+          >
             <div className="text-xs font-sans text-amber-800 font-medium">Review (31–70)</div>
             <div className="text-xl font-bold text-amber-800">
               {reviewCount}{' '}
@@ -267,24 +295,29 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                 ({pendingQuarantine.length} held)
               </span>
             </div>
-          </div>
-          <div className="px-4 py-2.5 rounded-lg bg-rose-50/90 border border-rose-200">
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.06, y: -3 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 20 }}
+            className="px-4 py-2.5 rounded-lg bg-rose-50/90 border border-rose-200 cursor-pointer"
+            onClick={() => setTierFilter('BLOCK')}
+          >
             <div className="text-xs font-sans text-rose-800 font-medium">Blocked (71–100)</div>
             <div className="text-xl font-bold text-rose-700">{blockedCount}</div>
-          </div>
+          </motion.div>
         </div>
       </div>
 
-      {/* DEDICATED SECTION: Blocked USB Insertion Forensics & High-Risk Workstation Telemetry */}
+      {/* DEDICATED SECTION: Blocked USB Insertion Forensics & Whitelisted Mobile Endpoint */}
       <div className="rounded-xl border border-rose-200/90 bg-gradient-to-br from-white via-rose-50/25 to-indigo-50/30 p-6 space-y-6 card-3d">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-rose-200/70 pb-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2 text-xs text-rose-700 font-semibold">
               <Usb className="w-4 h-4 text-rose-600" />
-              <span>Commercial USB Insertion Forensics</span>
+              <span>USB Access Control &amp; Hardware Forensics</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono text-indigo-700">
-                {blockedUsbEvents.length} Blocked USB Attempts Across{' '}
+                {blockedUsbEvents.length} Blocked UNAUTHORISED USB Attempts Across{' '}
                 {workstationRiskProfiles.filter((w) => w.blockedAttempts > 0).length} Workstations
               </span>
             </div>
@@ -292,7 +325,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
               Blocked USB Insertion Frequency &amp; High-Risk Workstation Telemetry
             </h2>
             <p className="text-xs text-slate-600 max-w-3xl">
-              Tracks unauthorized commercial pen drive insertion frequency over time, hardware VID:PID signatures, physical bus ports, and repeat-offender workstations to pinpoint insider exfiltration hotspots.
+              Whitelists the authorized mobile endpoint (<strong>TECNO POVA 6 Neo 5G</strong>) with Access Granted while tracking unauthorized USB device insertion frequency over time, VID:PID hardware signatures, and repeat-offender workstations.
             </p>
           </div>
 
@@ -330,17 +363,51 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
           </div>
         </div>
 
+        {/* Authorised Mobile Device Status Strip in Analyst Dashboard */}
+        <motion.div
+          whileHover={{ scale: 1.015 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+          className="rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50/90 via-white to-teal-50/80 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-emerald-600 text-white shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono font-bold text-emerald-800">
+                  [AUTHORISED WHITELISTED MOBILE]
+                </span>
+                <span className="text-sm font-bold text-slate-950 font-mono">
+                  {authorisedMobileDevice.id} ({authorisedMobileDevice.mobileModel})
+                </span>
+              </div>
+              <div className="text-xs font-mono text-slate-600 mt-0.5">
+                InstanceId: {authorisedMobileDevice.instanceId} · VID: {authorisedMobileDevice.vid} | PID: {authorisedMobileDevice.pid} | Serial: {authorisedMobileDevice.serialNumber} · {authorisedMobileDevice.connectionMode}
+              </div>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-mono font-bold shrink-0 self-start md:self-center">
+            <ShieldCheck className="w-4 h-4" />
+            AUTHORISED · Status: Access Granted
+          </span>
+        </motion.div>
+
         {/* 2-Column Split: Left = Blocked USB Frequency Over Time Chart | Right = High-Risk Employees & Workstations Matrix */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {/* Left 6 Cols: Blocked USB Frequency Over Time Bar Timeline */}
-          <div className="lg:col-span-6 rounded-xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between space-y-4">
+          <motion.div
+            whileHover={{ scale: 1.018 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+            className="lg:col-span-6 rounded-xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between space-y-4 shadow-2xs"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-950">
                   Blocked USB Insertion Frequency Over Time (60-Min Window)
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Temporal distribution of unauthorized commercial pen drive hardware blocks
+                  Temporal distribution of UNAUTHORISED USB hardware blocks
                 </p>
               </div>
               <span className="text-xs font-mono font-bold text-rose-700 tabular-nums">
@@ -351,9 +418,11 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
             <div className="pt-4 pb-2 px-2">
               <div className="h-44 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
                 {usbFrequencyTimeline.buckets.map((bucket) => (
-                  <div
+                  <motion.div
                     key={bucket.label}
-                    className="flex-1 flex flex-col items-center justify-end h-full group"
+                    whileHover={{ scale: 1.08, y: -4 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 18 }}
+                    className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
                   >
                     <div className="text-xs font-mono font-bold text-slate-800 mb-1.5 tabular-nums">
                       {bucket.count}
@@ -371,7 +440,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                         title={`${bucket.label}: ${bucket.count} blocked attempts (${bucket.bytes} B)`}
                       />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
 
@@ -410,17 +479,17 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                 B
               </span>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right 6 Cols: High-Risk Employees & Workstations Leaderboard */}
-          <div className="lg:col-span-6 rounded-xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between space-y-4">
+          <div className="lg:col-span-6 rounded-xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between space-y-4 shadow-2xs">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-950">
                   High-Risk Employees &amp; Workstation Leaderboard
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Ranked by frequency of blocked commercial USB insertion attempts
+                  Ranked by frequency of blocked UNAUTHORISED USB insertion attempts
                 </p>
               </div>
               <Monitor className="w-4 h-4 text-indigo-600" />
@@ -430,14 +499,17 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
               {workstationRiskProfiles.map((prof) => {
                 const isSelectedWs = workstationFilter === prof.workstationId;
                 return (
-                  <div
+                  <motion.div
                     key={prof.workstationId}
+                    whileHover={{ scale: 1.03, y: -2 }}
+                    whileTap={{ scale: 0.99 }}
+                    transition={{ type: 'spring', stiffness: 340, damping: 20 }}
                     onClick={() =>
                       setWorkstationFilter((prev) =>
                         prev === prof.workstationId ? 'ALL' : prof.workstationId
                       )
                     }
-                    className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
+                    className={`rounded-xl border p-3.5 cursor-pointer ${
                       isSelectedWs
                         ? 'border-rose-500 bg-rose-50/60 ring-1 ring-rose-500'
                         : prof.blockedAttempts >= 2
@@ -500,7 +572,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                         </span>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -513,7 +585,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
             <div className="flex items-center gap-2">
               <AlertOctagon className="w-4 h-4 text-rose-600" />
               <h3 className="text-xs font-bold text-slate-950 uppercase tracking-wider">
-                Blocked Commercial USB Hardware Metadata Log ({visibleBlockedUsbEvents.length} Events)
+                Blocked UNAUTHORISED USB Hardware Metadata Log ({visibleBlockedUsbEvents.length} Events)
               </h3>
             </div>
             {workstationFilter !== 'ALL' && (
@@ -529,7 +601,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
 
           {visibleBlockedUsbEvents.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500">
-              No blocked commercial USB insertion attempts match the current workstation filter.
+              No blocked UNAUTHORISED USB insertion attempts match the current workstation filter.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -538,7 +610,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                   <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-700 font-semibold">
                     <th className="py-2.5 px-4">Timestamp</th>
                     <th className="py-2.5 px-4">Workstation &amp; Employee</th>
-                    <th className="py-2.5 px-4">Commercial USB Device &amp; Vendor</th>
+                    <th className="py-2.5 px-4">UNAUTHORISED USB Device &amp; Vendor</th>
                     <th className="py-2.5 px-4">VID:PID &amp; Serial</th>
                     <th className="py-2.5 px-4">Physical Port</th>
                     <th className="py-2.5 px-4">Target File</th>
@@ -717,7 +789,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs font-medium mb-1">
-                  <span className="text-slate-900">W1: Content (Presidio + Regex + Pandas)</span>
+                  <span className="text-slate-900">W1: Content Inspection</span>
                   <span className="font-mono font-bold text-indigo-700 tabular-nums">
                     {w1.toFixed(2)}
                   </span>
@@ -735,7 +807,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
 
               <div>
                 <div className="flex justify-between text-xs font-medium mb-1">
-                  <span className="text-slate-900">W2: Behaviour (Dest + Commercial USB + 3x Vol)</span>
+                  <span className="text-slate-900">W2: Behaviour (Dest + USB Auth + 3x Vol)</span>
                   <span className="font-mono font-bold text-amber-700 tabular-nums">
                     {w2.toFixed(2)}
                   </span>
@@ -777,8 +849,10 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
             ) : (
               <div className="space-y-3">
                 {pendingQuarantine.map((item) => (
-                  <div
+                  <motion.div
                     key={item.id}
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 20 }}
                     className="rounded-lg border border-amber-300 bg-amber-50/60 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
                   >
                     <div className="space-y-1">
@@ -821,7 +895,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                         Reject
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -875,6 +949,25 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                     {drillDownEvent.severity})
                   </div>
                 </div>
+
+                {drillDownEvent.channel === 'USB' && drillDownEvent.usbMetadata && (
+                  <div
+                    className={`p-3 rounded-lg border font-mono text-xs ${
+                      drillDownEvent.usbMetadata.authorised
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                        : 'bg-rose-50 border-rose-300 text-rose-950'
+                    }`}
+                  >
+                    <div className="font-bold">
+                      {drillDownEvent.usbMetadata.authorised
+                        ? `[AUTHORISED MOBILE] ${drillDownEvent.usbMetadata.id} — Status: Access Granted`
+                        : `[UNAUTHORISED USB] ${drillDownEvent.usbMetadata.id} — Status: BLOCKED!`}
+                    </div>
+                    <div className="mt-0.5">
+                      VID: {drillDownEvent.usbMetadata.vid} | PID: {drillDownEvent.usbMetadata.pid} | Serial: {drillDownEvent.usbMetadata.serialNumber} · {drillDownEvent.usbMetadata.connectionMode || 'USB Interface'}
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 font-mono text-xs text-slate-900 leading-relaxed">
                   {drillDownEvent.formattedSummaryLine}
@@ -937,52 +1030,49 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
-              {(['ALL', 'BLOCK', 'REVIEW', 'ALLOW'] as const).map((tier) => (
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs">
+              {(['ALL', 'ALLOW', 'REVIEW', 'BLOCK'] as const).map((t) => (
                 <button
-                  key={tier}
+                  key={t}
                   type="button"
-                  onClick={() => setTierFilter(tier)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    tierFilter === tier
+                  onClick={() => setTierFilter(t)}
+                  className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    tierFilter === t
                       ? 'bg-indigo-600 text-white'
-                      : 'text-slate-600 hover:text-slate-950'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {tier}
+                  {t}
                 </button>
               ))}
             </div>
 
-            {events.length > 0 ? (
+            <button
+              type="button"
+              onClick={onRestoreDemoEvents}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore Sample Events
+            </button>
+
+            {events.length > 0 && (
               <button
                 type="button"
                 onClick={onClearEvents}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Reset Demo
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onRestoreDemoEvents}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Restore Sample Events
+                Clear
               </button>
             )}
           </div>
         </div>
 
         {filteredEvents.length === 0 ? (
-          <div className="p-10 text-center space-y-3">
-            <div className="text-sm font-semibold text-slate-950">
-              No DLP events match your current filters
-            </div>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Submit a file transfer from the Employee Console or restore the baseline sample events to inspect traffic patterns.
+          <div className="p-8 text-center space-y-3">
+            <p className="text-xs text-slate-500">
+              No DLP events match the current filter. Trigger a transfer from the Employee Console or restore the baseline sample events to inspect traffic patterns.
             </p>
             <button
               type="button"
@@ -1015,10 +1105,7 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-200/70 text-xs">
                 {filteredEvents.map((ev) => {
-                  const liveScore = Math.min(
-                    100,
-                    Math.round(ev.contentScore * w1 + ev.behaviourScore * w2)
-                  );
+                  const liveScore = computeLiveEventScore(ev, w1, w2);
                   const isSelected = drillDownEvent?.id === ev.id;
 
                   const rowBgClass =
@@ -1053,6 +1140,17 @@ export const AnalystDashboard: React.FC<AnalystDashboardProps> = ({
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-700 break-all max-w-xs">
                         {ev.destination}
+                        {ev.channel === 'USB' && (
+                          <span
+                            className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              ev.usbMetadata?.authorised
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {ev.usbMetadata?.authorised ? 'AUTHORISED' : 'UNAUTHORISED'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-700 tabular-nums whitespace-nowrap">
                         {ev.fileSizeBytes} B

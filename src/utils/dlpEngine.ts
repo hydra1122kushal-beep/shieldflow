@@ -1,5 +1,6 @@
 import {
   BuiltInMockFileName,
+  EmailRecipientCategory,
   EmailRecipientOption,
   MOCK_EMPLOYEES,
   MOCK_FILES,
@@ -7,7 +8,7 @@ import {
   UsbDeviceId,
   UsbDeviceMetadata,
   getApprovedDestination,
-  getEmailRecipientsForFile,
+  resolveEmailRecipient,
   resolveUsbDeviceMetadata,
 } from '../data/mockFiles';
 import { analyzeUploadedFile } from './accountsDataset';
@@ -55,6 +56,7 @@ export interface DLPEvaluationResult {
   channel: DLPChannel;
   destination: string;
   approvedDestination: string;
+  emailRecipientCategory?: EmailRecipientCategory;
   usbMetadata?: UsbDeviceMetadata;
   contentScore: number;
   behaviourScore: number;
@@ -75,7 +77,6 @@ export interface DLPEvaluationResult {
   resolvedAt?: string;
 }
 
-// Regex + Presidio pattern signatures
 const REGEX_PATTERNS = {
   tagConfidential: /\[CONFIDENTIAL\]/g,
   tagInternalOnly: /\[INTERNAL ONLY\]/g,
@@ -128,10 +129,10 @@ export function analyzeFileContent(
   const intMatches = text.match(REGEX_PATTERNS.tagInternalOnly) || [];
   if (intMatches.length > 0) {
     tagsDetected.push('[INTERNAL ONLY]');
-    rawPoints += 25;
+    rawPoints += 35;
     contentReasons.push({
       category: 'CONTENT',
-      points: 25,
+      points: 35,
       text: 'Tagged [INTERNAL ONLY] sensitivity label',
     });
   }
@@ -143,7 +144,7 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${ccMatches.length} credit card numbers detected via Presidio CREDIT_CARD recognizer`,
+      text: `${ccMatches.length} credit card numbers detected`,
     });
   }
 
@@ -154,7 +155,7 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${ssnMatches.length} SSN numbers detected via Presidio US_SSN recognizer`,
+      text: `${ssnMatches.length} SSN numbers detected`,
     });
   }
 
@@ -165,7 +166,7 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${panMatches.length} Indian tax PAN numbers detected via Presidio IN_PAN recognizer`,
+      text: `${panMatches.length} Indian tax PAN numbers detected`,
     });
   }
 
@@ -176,7 +177,7 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${aadhaarMatches.length} Aadhaar identity numbers detected via Presidio IN_AADHAAR recognizer`,
+      text: `${aadhaarMatches.length} Aadhaar identity numbers detected`,
     });
   }
 
@@ -204,7 +205,6 @@ export function analyzeFileContent(
     });
   }
 
-  // Run Pandas DataFrame column schema analysis for CSV/TSV files
   let sensitiveCsvColumns: string[] = [];
   let csvRowCount = 0;
   if (/\.(csv|tsv)$/i.test(filename) || text.includes(',')) {
@@ -218,7 +218,7 @@ export function analyzeFileContent(
         contentReasons.push({
           category: 'CONTENT',
           points: colPts,
-          text: `Pandas DataFrame schema detected ${sensitiveCsvColumns.length} sensitive columns (${sensitiveCsvColumns.join(', ')}) across ${csvRowCount} rows`,
+          text: `Detected ${sensitiveCsvColumns.length} sensitive columns (${sensitiveCsvColumns.join(', ')}) across ${csvRowCount} rows`,
         });
       }
     }
@@ -231,12 +231,12 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${phoneMatches.length} phone numbers detected via Presidio PHONE_NUMBER recognizer`,
+      text: `${phoneMatches.length} phone numbers detected`,
     });
   }
 
   const emailMatches = (text.match(REGEX_PATTERNS.email) || []).filter(
-    (e) => e !== approvedDest
+    (e) => e.toLowerCase() !== approvedDest.toLowerCase()
   );
   if (emailMatches.length > 0) {
     const pts = Math.min(18, Math.round(emailMatches.length * 1.5));
@@ -244,7 +244,7 @@ export function analyzeFileContent(
     contentReasons.push({
       category: 'CONTENT',
       points: pts,
-      text: `${emailMatches.length} email addresses detected via Presidio EMAIL_ADDRESS recognizer`,
+      text: `${emailMatches.length} email addresses detected`,
     });
   }
 
@@ -267,6 +267,24 @@ export function analyzeFileContent(
   };
 }
 
+export function computeLiveEventScore(
+  ev: DLPEvaluationResult,
+  w1: number,
+  w2: number
+): number {
+  if (ev.channel === 'USB' && ev.usbMetadata?.authorised) {
+    return Math.min(30, Math.round(ev.contentScore * 0.25));
+  }
+  if (ev.channel === 'Email' && ev.emailRecipientCategory === 'approved') {
+    return Math.min(28, Math.round(ev.contentScore * 0.25));
+  }
+  const weighted = Math.min(100, Math.round(ev.contentScore * w1 + ev.behaviourScore * w2));
+  if (ev.hardViolationTriggered) {
+    return Math.max(85, weighted);
+  }
+  return weighted;
+}
+
 export function evaluateDLPTransfer(params: {
   employeeId: string;
   employeeName: string;
@@ -277,6 +295,9 @@ export function evaluateDLPTransfer(params: {
   channel: DLPChannel;
   emailRecipientAddress?: string;
   usbDeviceId?: UsbDeviceId;
+  customVid?: string;
+  customPid?: string;
+  customSerial?: string;
   userHistoryBytes: number[];
   w1: number;
   w2: number;
@@ -292,12 +313,14 @@ export function evaluateDLPTransfer(params: {
     channel,
     emailRecipientAddress,
     usbDeviceId,
+    customVid,
+    customPid,
+    customSerial,
     userHistoryBytes,
     w1,
     w2,
     overrideContent,
     overrideSizeBytes,
-    isImmediatePenDriveInsertion,
   } = params;
 
   const empObj = MOCK_EMPLOYEES.find((e) => e.id === employeeId) || MOCK_EMPLOYEES[0];
@@ -312,7 +335,6 @@ export function evaluateDLPTransfer(params: {
   const detectionSummary = analyzeFileContent(filename, overrideContent);
   const contentScore = detectionSummary.contentScore;
 
-  // Calculate historical volume baseline average
   const userAvgBytesBefore =
     userHistoryBytes.length > 0
       ? Math.round(userHistoryBytes.reduce((acc, v) => acc + v, 0) / userHistoryBytes.length)
@@ -325,13 +347,13 @@ export function evaluateDLPTransfer(params: {
   let hardViolationTriggered = false;
   let hardViolationSummary: string | null = null;
   let destinationLabel = '';
+  let emailRecipientCategory: EmailRecipientCategory | undefined = undefined;
   let usbMetadata: UsbDeviceMetadata | undefined = undefined;
 
   if (channel === 'Email') {
-    const recipients = getEmailRecipientsForFile(filename);
-    const chosen: EmailRecipientOption =
-      recipients.find((r) => r.address === emailRecipientAddress) || recipients[0];
+    const chosen: EmailRecipientOption = resolveEmailRecipient(filename, emailRecipientAddress);
     destinationLabel = chosen.address;
+    emailRecipientCategory = chosen.category;
 
     behaviourRaw += chosen.riskPoints;
 
@@ -339,13 +361,13 @@ export function evaluateDLPTransfer(params: {
       behaviourReasons.push({
         category: 'BEHAVIOUR',
         points: 0,
-        text: `Destination matches original approved recipient (${approvedDestination})`,
+        text: `Destination matches original approved recipient (${approvedDestination}) — Email Authorised`,
       });
     } else if (chosen.category === 'other_internal') {
       behaviourReasons.push({
         category: 'BEHAVIOUR',
         points: chosen.riskPoints,
-        text: `Sent to internal recipient (${chosen.address}) instead of original approved (${approvedDestination})`,
+        text: `Sent to internal department (${chosen.address}) instead of original approved (${approvedDestination})`,
       });
     } else if (chosen.category === 'partner') {
       behaviourReasons.push({
@@ -355,12 +377,12 @@ export function evaluateDLPTransfer(params: {
       });
     } else if (chosen.category === 'personal_gmail') {
       hardViolationTriggered = true;
-      hardViolationSummary = `VIOLATION RULE: Email sent to non-identified personal Gmail (${chosen.address}) instead of approved destination (${approvedDestination})`;
+      hardViolationSummary = `VIOLATION RULE: Email sent to non-identified personal webmail (${chosen.address}) instead of approved destination (${approvedDestination})`;
       behaviourReasons.push({
         category: 'VIOLATION_RULE',
         points: chosen.riskPoints,
         isHardViolation: true,
-        text: `destination is a personal gmail (${chosen.address}) instead of ${approvedDestination}`,
+        text: `destination is a personal webmail (${chosen.address}) instead of ${approvedDestination}`,
       });
     } else if (chosen.category === 'unknown_external') {
       hardViolationTriggered = true;
@@ -374,34 +396,37 @@ export function evaluateDLPTransfer(params: {
     }
   } else {
     // USB CHANNEL:
-    // Corporate encrypted USB is allowed (Risk 20), whereas Commercial (Unauthorised) Pen Drives are immediately DENIED (Risk 100)!
-    const chosenUsb = resolveUsbDeviceMetadata(usbDeviceId);
+    // Whitelisted device (TECNO POVA 6 Neo 5G | VID: 0E8D | PID: 2008 | Serial: 13161314A6041832) -> AUTHORISED (Access Granted)
+    // All other USB devices -> UNAUTHORISED (Disable-PnpDevice / BLOCKED!)
+    const chosenUsb = resolveUsbDeviceMetadata(usbDeviceId, customVid, customPid, customSerial);
     usbMetadata = chosenUsb;
     destinationLabel = chosenUsb.id;
     behaviourRaw += chosenUsb.riskPoints;
 
     if (!chosenUsb.authorised) {
       hardViolationTriggered = true;
-      hardViolationSummary = `COMMERCIAL PEN DRIVE DENIED: Unauthorised commercial USB (${chosenUsb.id} · VID:PID ${chosenUsb.vidPid} · Serial ${chosenUsb.serialNumber}) blocked immediately on workstation ${workstationId}`;
+      hardViolationSummary = `[UNAUTHORISED] ${chosenUsb.id} | VID: ${chosenUsb.vid} | PID: ${chosenUsb.pid} | Serial: ${chosenUsb.serialNumber} — Action: Blocking device now... Status: BLOCKED!`;
       behaviourReasons.push({
         category: 'VIOLATION_RULE',
         points: chosenUsb.riskPoints,
         isHardViolation: true,
-        text: isImmediatePenDriveInsertion
-          ? `Immediate hardware alert: Commercial (unauthorised) pen drive inserted (${chosenUsb.id} [${chosenUsb.vidPid}] on ${workstationId})`
-          : `Commercial (unauthorised) pen drive denied (${chosenUsb.id} · ${chosenUsb.vendor} [${chosenUsb.vidPid}])`,
+        text: `[UNAUTHORISED] ${chosenUsb.id} (VID: ${chosenUsb.vid} | PID: ${chosenUsb.pid} | Serial: ${chosenUsb.serialNumber}) — Action: Blocking device now... Status: BLOCKED!`,
       });
     } else {
       behaviourReasons.push({
         category: 'BEHAVIOUR',
-        points: chosenUsb.riskPoints,
-        text: `Copied to corporate encrypted USB vault (${chosenUsb.id} · ${chosenUsb.vidPid})`,
+        points: 0,
+        text: `[AUTHORISED] ${chosenUsb.id} (VID: ${chosenUsb.vid} | PID: ${chosenUsb.pid} | Serial: ${chosenUsb.serialNumber}) — Status: Access Granted`,
       });
     }
   }
 
-  // Volume check: 3x or more user average
-  if (volumeMultiplier >= 3.0) {
+  const isApprovedTransfer =
+    (channel === 'USB' && Boolean(usbMetadata?.authorised)) ||
+    (channel === 'Email' && emailRecipientCategory === 'approved');
+
+  // Volume check: 3x or more user average (only apply volume penalty when transfer is not to an approved destination/device)
+  if (volumeMultiplier >= 3.0 && !isApprovedTransfer) {
     const volPts = volumeMultiplier >= 5.0 ? 25 : 20;
     behaviourRaw += volPts;
     behaviourReasons.push({
@@ -414,11 +439,17 @@ export function evaluateDLPTransfer(params: {
   const behaviourScore = Math.min(100, Math.round(behaviourRaw));
 
   // Leak score = Content x W1 + Behaviour x W2
-  const rawWeightedScore = Math.min(100, Math.round(contentScore * w1 + behaviourScore * w2));
+  const rawWeightedScore =
+    channel === 'USB' && usbMetadata?.authorised
+      ? Math.min(30, Math.round(contentScore * 0.25))
+      : channel === 'Email' && emailRecipientCategory === 'approved'
+      ? Math.min(28, Math.round(contentScore * 0.25))
+      : Math.min(100, Math.round(contentScore * w1 + behaviourScore * w2));
 
-  // Determine tier based on 0-30 Allow, 31-70 Review, 71-100 Block
   let tier: DLPActionTier = 'ALLOW';
-  if (rawWeightedScore >= 71) {
+  if (isApprovedTransfer) {
+    tier = 'ALLOW';
+  } else if (rawWeightedScore >= 71) {
     tier = 'BLOCK';
   } else if (rawWeightedScore >= 31) {
     tier = 'REVIEW';
@@ -426,15 +457,14 @@ export function evaluateDLPTransfer(params: {
     tier = 'ALLOW';
   }
 
-  // Enforce mandatory violation rules: Commercial (unauthorised) Pen Drives are ALWAYS DENIED (BLOCK)
+  // Enforce mandatory violation rules: UNAUTHORISED USB devices and Personal/External Emails are always BLOCKED
   if (hardViolationTriggered) {
     tier = 'BLOCK';
   }
 
-  const finalLeakScore =
-    hardViolationTriggered && channel === 'USB'
-      ? Math.max(75, rawWeightedScore)
-      : rawWeightedScore;
+  const finalLeakScore = hardViolationTriggered
+    ? Math.max(85, rawWeightedScore)
+    : rawWeightedScore;
 
   let severity: DLPSeverity = 'LOW';
   if (finalLeakScore >= 75 || (hardViolationTriggered && finalLeakScore >= 50)) {
@@ -445,9 +475,8 @@ export function evaluateDLPTransfer(params: {
     severity = 'MEDIUM';
   }
 
-  // Combine and rank reasons by highest points & hard violation priority
   const allReasons = [...detectionSummary.contentReasons, ...behaviourReasons]
-    .filter((r) => r.points > 0 || r.isHardViolation)
+    .filter((r) => r.points > 0 || r.isHardViolation || isApprovedTransfer)
     .sort((a, b) => {
       if (a.isHardViolation && !b.isHardViolation) return -1;
       if (!a.isHardViolation && b.isHardViolation) return 1;
@@ -487,6 +516,7 @@ export function evaluateDLPTransfer(params: {
     channel,
     destination: destinationLabel,
     approvedDestination,
+    emailRecipientCategory,
     usbMetadata,
     contentScore,
     behaviourScore,

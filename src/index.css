@@ -29,50 +29,63 @@
   }
 }
 
-/* 3D Perspective & Card Tilt Utilities */
+/* Blow-Up (Scale Pop-Out) Card Utilities — No Tilting */
 .perspective-stage {
-  perspective: 1400px;
+  transform-origin: center top;
 }
 
 .card-3d {
-  transform-style: preserve-3d;
   transition:
-    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
     border-color 0.25s ease;
+  will-change: transform;
 }
 
 .card-3d:hover {
-  transform: translateY(-4px) rotateX(1.8deg) rotateY(-1.2deg);
+  transform: scale(1.022) translateY(-3px);
   box-shadow:
-    0 20px 38px -12px rgba(15, 23, 42, 0.12),
-    0 4px 12px -2px rgba(79, 70, 229, 0.08);
+    0 22px 42px -12px rgba(15, 23, 42, 0.14),
+    0 6px 16px -2px rgba(79, 70, 229, 0.1);
 }
 
 .card-3d-subtle {
-  transform-style: preserve-3d;
   transition:
-    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
 .card-3d-subtle:hover {
-  transform: translateY(-2px) translateZ(6px);
-  box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.1);
+  transform: scale(1.015) translateY(-2px);
+  box-shadow: 0 16px 32px -10px rgba(15, 23, 42, 0.12);
 }
 
-@keyframes float3DLogo {
+.card-blowup {
+  transition:
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.card-blowup:hover {
+  transform: scale(1.045) translateY(-4px);
+  box-shadow:
+    0 24px 44px -10px rgba(15, 23, 42, 0.16),
+    0 8px 18px -4px rgba(79, 70, 229, 0.12);
+}
+
+@keyframes pulse3DLogo {
   0%, 100% {
-    transform: perspective(600px) rotateY(-8deg) rotateX(6deg) translateY(0px);
+    transform: scale(1);
   }
   50% {
-    transform: perspective(600px) rotateY(8deg) rotateX(-4deg) translateY(-2px);
+    transform: scale(1.08);
   }
 }
 
 .logo-3d-emblem {
-  animation: float3DLogo 6s ease-in-out infinite;
-  transform-style: preserve-3d;
+  animation: pulse3DLogo 4s ease-in-out infinite;
 }
 
 @keyframes dlpAlertFlash {
@@ -96,7 +109,8 @@
   .dlp-flashing-banner,
   .logo-3d-emblem,
   .card-3d,
-  .card-3d-subtle {
+  .card-3d-subtle,
+  .card-blowup {
     animation: none !important;
     transform: none !important;
   }

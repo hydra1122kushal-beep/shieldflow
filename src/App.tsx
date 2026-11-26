@@ -14,7 +14,6 @@ import {
   evaluateDLPTransfer,
 } from './utils/dlpEngine';
 import { armAlertsUserGesture, isVibrationSupported } from './utils/alertFeedback';
-import { STREAMLIT_APP_PY_CODE } from './utils/streamlitExport';
 import {
   UploadedDatasetScanReport,
   analyzeUploadedFile,
@@ -27,11 +26,9 @@ import {
   Volume2,
   Smartphone,
   LogOut,
-  Download,
   Sliders,
   CheckCircle2,
   ArrowRight,
-  Code2,
   Usb,
   FileSpreadsheet,
 } from 'lucide-react';
@@ -124,7 +121,7 @@ function createInitialDemoEvents(): DLPEvaluationResult[] {
       employeeRole: 'Product Engineer',
       filename: 'project_plan.txt',
       channel: 'USB',
-      usbDeviceId: 'Registered-USB-01',
+      usbDeviceId: 'TECNO POVA 6 Neo 5G',
       userHistoryBytes: [380, 410, 440, 370],
       offsetMin: 5,
     },
@@ -187,7 +184,7 @@ function createInitialDemoEvents(): DLPEvaluationResult[] {
       employeeRole: 'HR Specialist',
       filename: 'public_policy.txt',
       channel: 'USB',
-      usbDeviceId: 'Registered-USB-01',
+      usbDeviceId: 'TECNO POVA 6 Neo 5G',
       userHistoryBytes: [500, 420, 460, 540],
       offsetMin: 34,
     },
@@ -284,8 +281,6 @@ export default function App() {
     Record<string, DLPEvaluationResult>
   >({});
 
-  const [showPythonModal, setShowPythonModal] = useState<boolean>(false);
-
   const activeEmployee =
     MOCK_EMPLOYEES.find((e) => e.id === selectedEmployeeId) || MOCK_EMPLOYEES[0];
   const activeAnalyst =
@@ -310,6 +305,9 @@ export default function App() {
     channel: DLPChannel;
     emailRecipientAddress?: string;
     usbDeviceId?: UsbDeviceId;
+    customVid?: string;
+    customPid?: string;
+    customSerial?: string;
     overrideContent?: string;
     overrideSizeBytes?: number;
     isImmediatePenDriveInsertion?: boolean;
@@ -327,6 +325,9 @@ export default function App() {
       channel: params.channel,
       emailRecipientAddress: params.emailRecipientAddress,
       usbDeviceId: params.usbDeviceId,
+      customVid: params.customVid,
+      customPid: params.customPid,
+      customSerial: params.customSerial,
       userHistoryBytes: currentHistory,
       w1,
       w2,
@@ -390,18 +391,6 @@ export default function App() {
     );
   };
 
-  const handleDownloadStreamlitScript = () => {
-    const blob = new Blob([STREAMLIT_APP_PY_CODE], { type: 'text/x-python;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'app.py';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const pendingReviewCount = events.filter(
     (e) => e.tier === 'REVIEW' && e.quarantineStatus === 'PENDING_REVIEW'
   ).length;
@@ -456,13 +445,6 @@ export default function App() {
           >
             Analyst Dashboard ({pendingReviewCount})
           </button>
-          <button
-            type="button"
-            onClick={() => setShowPythonModal(true)}
-            className="hover:text-indigo-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Streamlit Export
-          </button>
         </nav>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -515,9 +497,6 @@ export default function App() {
             <div>
               <div className="text-sm font-bold tracking-tight text-white">
                 SentinelDLP Prism
-              </div>
-              <div className="text-[11px] font-mono text-teal-300">
-                Presidio · Pandas · USB Guard
               </div>
             </div>
           </div>
@@ -585,22 +564,6 @@ export default function App() {
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Commercial USB Guard Policy Indicator */}
-          <div className="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50/80 to-amber-50/40 p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
-                <Usb className="w-3.5 h-3.5 text-rose-600" />
-                Commercial USB Guard
-              </span>
-              <span className="font-mono text-xs font-bold text-rose-700">
-                {blockedUsbCount} BLOCKED
-              </span>
-            </div>
-            <p className="text-xs text-rose-900/80 leading-relaxed">
-              Corporate AES-256 encrypted USB vaults are permitted (Risk 20). Commercial (unauthorised) pen drives trigger immediate denial &amp; workstation forensics.
-            </p>
           </div>
 
           {/* Mobile Vibration & Audio */}
@@ -697,34 +660,6 @@ export default function App() {
               Score = C×{w1.toFixed(2)} + B×{w2.toFixed(2)}
             </div>
           </div>
-
-          {/* Streamlit Python Export */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-            <div className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
-              <Code2 className="w-3.5 h-3.5 text-indigo-600" />
-              Python Streamlit Export
-            </div>
-            <p className="text-xs text-slate-500">
-              Download <code className="font-mono text-indigo-700">app.py</code> with Presidio + Pandas CSV scanning &amp; Commercial USB Forensics.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleDownloadStreamlitScript}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold bg-white hover:bg-indigo-50 text-slate-900 border border-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Download className="w-3.5 h-3.5 text-indigo-600" />
-                Download app.py
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPythonModal(true)}
-                className="py-2 px-3 rounded-lg text-xs font-medium bg-white hover:bg-indigo-50 text-slate-700 border border-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-              >
-                View
-              </button>
-            </div>
-          </div>
         </aside>
 
         {/* Main Content Area with 3D Animated View Transitions */}
@@ -733,10 +668,10 @@ export default function App() {
             {activeRole === 'LANDING' && (
               <motion.div
                 key="view-landing"
-                initial={{ opacity: 0, rotateX: 3, y: 14 }}
-                animate={{ opacity: 1, rotateX: 0, y: 0 }}
-                exit={{ opacity: 0, rotateX: -2, y: -10 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 22 }}
                 className="max-w-5xl mx-auto space-y-8"
               >
                 {/* Hero Header with 3D Emblem Logo & Color Grading */}
@@ -1016,44 +951,6 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
-
-      {/* Streamlit Python Source Modal */}
-      {showPythonModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-xl">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-slate-50">
-              <div>
-                <h3 className="text-base font-bold text-slate-950">
-                  Streamlit Python Script (<code className="font-mono text-indigo-700">app.py</code>)
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Self-contained Streamlit prototype with Presidio + Pandas CSV scanning, corporate vs commercial USB policy, and blocked USB telemetry.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadStreamlitScript}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download app.py
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPythonModal(false)}
-                  className="px-3.5 py-2 rounded-lg text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <pre className="p-5 text-xs font-mono text-slate-900 overflow-auto flex-1 bg-slate-50">
-              {STREAMLIT_APP_PY_CODE}
-            </pre>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

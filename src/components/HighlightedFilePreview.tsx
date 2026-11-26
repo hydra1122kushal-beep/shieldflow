@@ -29,11 +29,11 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
   const parts = contentToInspect.split(COMBINED_HIGHLIGHT_REGEX);
 
   return (
-    <div className="rounded-xl border border-emerald-900/12 bg-white overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-emerald-900/10 flex flex-wrap items-center justify-between gap-3 bg-[#f9fcfa]">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-950/70">
-          <FileText className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span className="font-mono font-semibold text-emerald-950">
+    <div className="rounded-xl border border-slate-200/90 bg-white overflow-hidden card-3d-subtle">
+      <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span className="font-mono font-semibold text-slate-950">
             {isUploadedFile ? `uploaded/${filename}` : `mock_files/${filename}`}
           </span>
           <span aria-hidden="true">·</span>
@@ -41,12 +41,12 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <span aria-hidden="true">·</span>
           <span>
             Approved:{' '}
-            <strong className="font-mono text-emerald-800">{approvedDest}</strong>
+            <strong className="font-mono text-teal-700">{approvedDest}</strong>
           </span>
         </div>
 
         <div className="text-xs font-mono tabular-nums flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Scan Verified
           </span>
@@ -57,26 +57,25 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold">
-              <AlertOctagon className="w-4 h-4 text-red-600" />
+              <AlertOctagon className="w-4 h-4 text-rose-600" />
               Content Score: {detection.contentScore}/100
             </span>
           )}
         </div>
       </div>
 
-      {/* Findings strip — Presidio + Regex + Pandas verification */}
-      <div className="px-5 py-2.5 bg-white border-b border-emerald-900/10 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-emerald-950/70">
-        <span className="font-semibold text-emerald-950">Presidio + Regex + Pandas Scanner:</span>
+      {/* Findings strip without the removed "Presidio + Regex + Pandas Scanner:" prefix */}
+      <div className="px-5 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
         {detection.tagsDetected.length > 0 && (
-          <span className="text-red-700 font-mono font-medium">
+          <span className="text-rose-700 font-mono font-medium">
             Tags: {detection.tagsDetected.join(', ')}
           </span>
         )}
         {detection.sensitiveCsvColumns.length > 0 && (
           <>
             <span aria-hidden="true">·</span>
-            <span className="text-red-700 font-mono font-medium">
-              Pandas Columns: [{detection.sensitiveCsvColumns.join(', ')}] ({detection.csvRowCount} rows)
+            <span className="text-rose-700 font-mono font-medium">
+              Columns: [{detection.sensitiveCsvColumns.join(', ')}] ({detection.csvRowCount} rows)
             </span>
           </>
         )}
@@ -84,7 +83,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              CREDIT_CARD: {detection.creditCardsCount}
+              Credit Cards: {detection.creditCardsCount}
             </span>
           </>
         )}
@@ -92,7 +91,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              US_SSN: {detection.ssnCount}
+              SSNs: {detection.ssnCount}
             </span>
           </>
         )}
@@ -100,7 +99,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              IN_PAN: {detection.panCount}
+              PAN: {detection.panCount}
             </span>
           </>
         )}
@@ -108,7 +107,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              IN_AADHAAR: {detection.aadhaarCount}
+              Aadhaar: {detection.aadhaarCount}
             </span>
           </>
         )}
@@ -116,24 +115,24 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              BANK_ACCOUNT: {detection.bankAccountCount}
-              {detection.routingNumberCount > 0 ? ` / ROUTING: ${detection.routingNumberCount}` : ''}
+              Bank Accounts: {detection.bankAccountCount}
+              {detection.routingNumberCount > 0 ? ` / Routing: ${detection.routingNumberCount}` : ''}
             </span>
           </>
         )}
         {detection.phoneCount > 0 && (
           <>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-800 font-mono tabular-nums">
-              PHONE_NUMBER: {detection.phoneCount}
+            <span className="text-teal-800 font-mono tabular-nums">
+              Phones: {detection.phoneCount}
             </span>
           </>
         )}
         {detection.emailCount > 0 && (
           <>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-800 font-mono tabular-nums">
-              EMAIL_ADDRESS: {detection.emailCount}
+            <span className="text-teal-800 font-mono tabular-nums">
+              Emails: {detection.emailCount}
             </span>
           </>
         )}
@@ -143,7 +142,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
       </div>
 
       {/* Highlighted content */}
-      <pre className="p-5 text-xs font-mono leading-relaxed text-emerald-950/85 bg-[#fbfdfb] overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">
+      <pre className="p-5 text-xs font-mono leading-relaxed text-slate-800 bg-slate-50/40 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">
         {parts.map((part, index) => {
           if (!part) return null;
           if (
@@ -154,7 +153,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
             return (
               <mark
                 key={index}
-                className="bg-red-100 text-red-900 border border-red-300 px-1 py-0.5 rounded font-bold"
+                className="bg-rose-100 text-rose-900 border border-rose-300 px-1 py-0.5 rounded font-bold"
               >
                 {part}
               </mark>
@@ -186,7 +185,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
             return (
               <mark
                 key={index}
-                className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-1 rounded"
+                className="bg-teal-100 text-teal-900 border border-teal-300 px-1 rounded"
               >
                 {part}
               </mark>

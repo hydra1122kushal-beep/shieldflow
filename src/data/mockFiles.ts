@@ -179,7 +179,7 @@ export const MOCK_EMPLOYEES: EmployeeProfile[] = [
     department: 'Corporate Treasury',
     workstationId: 'WS-FIN-104',
     workstationIp: '10.24.18.104',
-    defaultHistoryBytes: [420, 480, 390, 450], // Average: 435 B
+    defaultHistoryBytes: [420, 480, 390, 450],
   },
   {
     id: 'meera',
@@ -188,7 +188,7 @@ export const MOCK_EMPLOYEES: EmployeeProfile[] = [
     department: 'People Operations',
     workstationId: 'WS-HR-208',
     workstationIp: '10.24.22.208',
-    defaultHistoryBytes: [500, 420, 460, 540], // Average: 480 B
+    defaultHistoryBytes: [500, 420, 460, 540],
   },
   {
     id: 'rohan',
@@ -197,7 +197,7 @@ export const MOCK_EMPLOYEES: EmployeeProfile[] = [
     department: 'Core Payments',
     workstationId: 'WS-ENG-312',
     workstationIp: '10.24.16.312',
-    defaultHistoryBytes: [380, 410, 440, 370], // Average: 400 B
+    defaultHistoryBytes: [380, 410, 440, 370],
   },
 ];
 
@@ -256,28 +256,28 @@ export function getEmailRecipientsForFile(filename: string): EmailRecipientOptio
     },
     ...otherInternals.slice(0, 2).map((addr) => ({
       address: addr,
-      label: `${addr} (Other Internal Address — Risk 10)`,
+      label: `${addr} (Other Internal Address — Risk 35)`,
       category: 'other_internal' as const,
-      riskPoints: 10,
+      riskPoints: 35,
       isNonIdentifiedExternal: false,
     })),
     {
       address: 'audit-partner@trusted-partner.com',
-      label: 'audit-partner@trusted-partner.com (Verified Partner — Risk 40)',
+      label: 'audit-partner@trusted-partner.com (Verified Partner — Risk 55)',
       category: 'partner',
-      riskPoints: 40,
+      riskPoints: 55,
       isNonIdentifiedExternal: false,
     },
     {
       address: 'someone@gmail.com',
-      label: 'someone@gmail.com (personal_gmail — Non-Identified External — Risk 80)',
+      label: 'someone@gmail.com (personal_gmail — Non-Identified External — Risk 90)',
       category: 'personal_gmail',
-      riskPoints: 80,
+      riskPoints: 90,
       isNonIdentifiedExternal: true,
     },
     {
       address: 'unknown_drop@external-unverified.net',
-      label: 'Unknown external address (unknown_drop@external-unverified.net — Risk 100)',
+      label: 'unknown_drop@external-unverified.net (Unknown External — Risk 100)',
       category: 'unknown_external',
       riskPoints: 100,
       isNonIdentifiedExternal: true,
@@ -287,11 +287,117 @@ export function getEmailRecipientsForFile(filename: string): EmailRecipientOptio
   return options;
 }
 
-// USB DEVICE OPTIONS:
-// USB input allows choosing or entering a USB device.
-// Corporate hardware-encrypted USB is allowed (Risk 20), whereas Commercial (Unauthorised) Pen Drives are DENIED immediately (Risk 100).
+export function resolveEmailRecipient(
+  filename: string,
+  emailRecipientAddress?: string
+): EmailRecipientOption {
+  const presets = getEmailRecipientsForFile(filename);
+  const approved = getApprovedDestination(filename);
+  const raw = (emailRecipientAddress || approved).trim();
+
+  const exactPreset = presets.find((r) => r.address.toLowerCase() === raw.toLowerCase());
+  if (exactPreset) return exactPreset;
+
+  const lower = raw.toLowerCase();
+  if (lower === approved.toLowerCase()) {
+    return {
+      address: raw,
+      label: `${raw} (Original Approved Destination — Risk 0)`,
+      category: 'approved',
+      riskPoints: 0,
+      isNonIdentifiedExternal: false,
+    };
+  }
+
+  if (lower.endsWith('@company.com')) {
+    return {
+      address: raw,
+      label: `${raw} (Other Internal Department — Risk 35)`,
+      category: 'other_internal',
+      riskPoints: 35,
+      isNonIdentifiedExternal: false,
+    };
+  }
+
+  if (lower.endsWith('@trusted-partner.com') || lower.includes('partner')) {
+    return {
+      address: raw,
+      label: `${raw} (External Verified Partner — Risk 55)`,
+      category: 'partner',
+      riskPoints: 55,
+      isNonIdentifiedExternal: false,
+    };
+  }
+
+  if (/@(gmail|yahoo|outlook|hotmail|icloud|protonmail|aol|live|msn)\./i.test(lower)) {
+    return {
+      address: raw,
+      label: `${raw} (Personal Webmail — Non-Identified External — Risk 90)`,
+      category: 'personal_gmail',
+      riskPoints: 90,
+      isNonIdentifiedExternal: true,
+    };
+  }
+
+  return {
+    address: raw,
+    label: `${raw} (Unknown External Domain — Risk 100)`,
+    category: 'unknown_external',
+    riskPoints: 100,
+    isNonIdentifiedExternal: true,
+  };
+}
+
+// ============================================================================
+// USB ACCESS CONTROL WHITELIST (TECNO POVA 6 Neo 5G via Charger Cable)
+// ============================================================================
+export const AUTHORIZED_USB_DEVICES = [
+  {
+    name: 'TECNO POVA 6 Neo 5G',
+    vid: '0E8D',
+    pid: '2008',
+    serial: '13161314A6041832',
+  },
+];
+
+export const IGNORED_USB_PREFIXES = [
+  'USB\\ROOT_HUB',
+  'USB\\VID_04CA&PID_7070', // Integrated Camera / Composite
+  'USB\\VID_8087&PID_0A2B', // Intel Wireless Bluetooth
+];
+
+export function parseUsbInstanceId(instanceId: string): {
+  vid: string | null;
+  pid: string | null;
+  serial: string | null;
+} {
+  // Example format: USB\VID_0E8D&PID_2008\13161314A6041832
+  const parts = instanceId.trim().split('\\');
+  if (
+    parts.length < 3 ||
+    !parts[1].toUpperCase().includes('VID_') ||
+    !parts[1].toUpperCase().includes('PID_')
+  ) {
+    return { vid: null, pid: null, serial: null };
+  }
+  const vidPid = parts[1].split('&');
+  const vid = vidPid[0].replace(/VID_/i, '');
+  const pid = (vidPid[1] || '').replace(/PID_/i, '');
+  const serial = parts[2];
+  return { vid, pid, serial };
+}
+
+export function isUsbDeviceAuthorized(vid: string, pid: string, serial: string): boolean {
+  return AUTHORIZED_USB_DEVICES.some(
+    (dev) =>
+      dev.vid.toLowerCase() === vid.trim().toLowerCase() &&
+      dev.pid.toLowerCase() === pid.trim().toLowerCase() &&
+      dev.serial.toLowerCase() === serial.trim().toLowerCase()
+  );
+}
+
 export type UsbDeviceId =
-  | 'Registered-USB-01'
+  | 'TECNO POVA 6 Neo 5G'
   | 'SanDisk-Cruzer-Commercial-64GB'
   | 'Kingston-DataTraveler-Commercial-32GB'
   | 'Unknown-USB (unregistered)'
@@ -301,81 +407,174 @@ export interface UsbDeviceMetadata {
   id: UsbDeviceId;
   label: string;
   authorised: boolean;
+  accessStatusLabel: 'AUTHORISED' | 'UNAUTHORISED';
   riskPoints: number;
   vendor: string;
+  vid: string;
+  pid: string;
   vidPid: string;
   serialNumber: string;
-  deviceCategory: 'Corporate Encrypted Vault' | 'Commercial Unauthorised Pen Drive';
+  instanceId: string;
+  deviceCategory: 'Authorised Mobile Device' | 'Unauthorised USB Device';
   usbPort: string;
   capacityLabel: string;
+  mobileModel?: string;
+  connectionMode?: string;
+  osFirmware?: string;
+  busSpeed?: string;
+  powerDraw?: string;
 }
 
 export const USB_DEVICES: UsbDeviceMetadata[] = [
   {
-    id: 'Registered-USB-01',
-    label: 'Registered-USB-01 (IronKey Corporate AES-256 Encrypted USB — Risk 20)',
+    id: 'TECNO POVA 6 Neo 5G',
+    label: 'TECNO POVA 6 Neo 5G (VID: 0E8D | PID: 2008 | Serial: 13161314A6041832) — AUTHORISED',
     authorised: true,
-    riskPoints: 20,
-    vendor: 'Kingston IronKey Enterprise',
-    vidPid: '0951:1666',
-    serialNumber: 'IK-CORP-99201',
-    deviceCategory: 'Corporate Encrypted Vault',
+    accessStatusLabel: 'AUTHORISED',
+    riskPoints: 0,
+    vendor: 'TECNO Mobile Limited (MediaTek USB Composite)',
+    vid: '0E8D',
+    pid: '2008',
+    vidPid: '0E8D:2008',
+    serialNumber: '13161314A6041832',
+    instanceId: 'USB\\VID_0E8D&PID_2008\\13161314A6041832',
+    deviceCategory: 'Authorised Mobile Device',
     usbPort: 'USB3.2-Bus01-Port01',
-    capacityLabel: '16 GB Encrypted',
+    capacityLabel: '256 GB Internal UFS 2.2 (MTP)',
+    mobileModel: 'TECNO KL4 (POVA 6 Neo 5G)',
+    connectionMode: 'USB Type-C Charger Cable (MTP + ADB Interface)',
+    osFirmware: 'Android 14 · HiOS 14.0.0 (5G Security Patch Verified)',
+    busSpeed: 'High-Speed USB 2.0 / 480 Mbps',
+    powerDraw: '500 mA Fast-Charge Passthrough',
   },
   {
     id: 'SanDisk-Cruzer-Commercial-64GB',
-    label: 'SanDisk Cruzer Blade 64GB (Commercial Unauthorised Pen Drive — DENIED / Risk 100)',
+    label: 'SanDisk Cruzer Blade 64GB (VID: 0781 | PID: 5567 | Serial: SD-COMM-44819) — UNAUTHORISED',
     authorised: false,
+    accessStatusLabel: 'UNAUTHORISED',
     riskPoints: 100,
     vendor: 'SanDisk Consumer Retail',
+    vid: '0781',
+    pid: '5567',
     vidPid: '0781:5567',
     serialNumber: 'SD-COMM-44819',
-    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    instanceId: 'USB\\VID_0781&PID_5567\\SD-COMM-44819',
+    deviceCategory: 'Unauthorised USB Device',
     usbPort: 'USB3.2-Bus01-Port02',
-    capacityLabel: '64 GB FAT32',
+    capacityLabel: '64 GB FAT32 Mass Storage',
+    mobileModel: 'SanDisk Cruzer Blade (Commercial Flash Drive)',
+    connectionMode: 'USB-A Mass Storage Class (BOT)',
+    osFirmware: 'SanDisk Controller v1.27',
+    busSpeed: 'High-Speed 480 Mbps',
+    powerDraw: '200 mA Bus Powered',
   },
   {
     id: 'Kingston-DataTraveler-Commercial-32GB',
-    label: 'Kingston DataTraveler Exodia 32GB (Commercial Unauthorised Pen Drive — DENIED / Risk 100)',
+    label: 'Kingston DataTraveler Exodia 32GB (VID: 0951 | PID: 1665 | Serial: KG-COMM-77310) — UNAUTHORISED',
     authorised: false,
+    accessStatusLabel: 'UNAUTHORISED',
     riskPoints: 100,
     vendor: 'Kingston Consumer Retail',
+    vid: '0951',
+    pid: '1665',
     vidPid: '0951:1665',
     serialNumber: 'KG-COMM-77310',
-    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    instanceId: 'USB\\VID_0951&PID_1665\\KG-COMM-77310',
+    deviceCategory: 'Unauthorised USB Device',
     usbPort: 'USB3.2-Bus02-Port01',
-    capacityLabel: '32 GB exFAT',
+    capacityLabel: '32 GB exFAT Mass Storage',
+    mobileModel: 'Kingston DataTraveler Exodia DTX/32GB',
+    connectionMode: 'USB 3.2 Gen 1 Mass Storage',
+    osFirmware: 'Kingston PMAP v1.0',
+    busSpeed: 'SuperSpeed 5 Gbps',
+    powerDraw: '300 mA Bus Powered',
   },
   {
     id: 'Unknown-USB (unregistered)',
-    label: 'Unknown-USB (unregistered) (Unidentified Commercial Pen Drive — DENIED / Risk 100)',
+    label: 'Unknown USB Device (VID: 058F | PID: 6387 | Serial: UNREG-USB-00492) — UNAUTHORISED',
     authorised: false,
+    accessStatusLabel: 'UNAUTHORISED',
     riskPoints: 100,
-    vendor: 'Generic USB Mass Storage',
+    vendor: 'Alcor Micro / Generic USB Mass Storage',
+    vid: '058F',
+    pid: '6387',
     vidPid: '058F:6387',
     serialNumber: 'UNREG-USB-00492',
-    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    instanceId: 'USB\\VID_058F&PID_6387\\UNREG-USB-00492',
+    deviceCategory: 'Unauthorised USB Device',
     usbPort: 'USB2.0-FrontPanel-Port01',
-    capacityLabel: '128 GB NTFS',
+    capacityLabel: '128 GB NTFS Unverified Volume',
+    mobileModel: 'Unlabelled Generic Flash Drive',
+    connectionMode: 'USB Mass Storage Bulk-Only',
+    osFirmware: 'Generic Flash v8.07',
+    busSpeed: 'High-Speed 480 Mbps',
+    powerDraw: '250 mA Bus Powered',
   },
 ];
 
-export function resolveUsbDeviceMetadata(usbDeviceId?: string): UsbDeviceMetadata {
-  const found = USB_DEVICES.find((u) => u.id === usbDeviceId);
-  if (found) return found;
-  const customId = (usbDeviceId || 'Custom-Commercial-PenDrive').trim();
-  const isCorp = /registered|corpvault|ironkey/i.test(customId) && !/unregistered|commercial/i.test(customId);
+export function resolveUsbDeviceMetadata(
+  usbDeviceId?: string,
+  customVid?: string,
+  customPid?: string,
+  customSerial?: string
+): UsbDeviceMetadata {
+  if (!customVid && !customPid && !customSerial) {
+    const found = USB_DEVICES.find((u) => u.id === usbDeviceId || u.instanceId === usbDeviceId);
+    if (found) return found;
+  }
+
+  const rawInput = (usbDeviceId || 'Unknown USB Device').trim();
+  const parsed = parseUsbInstanceId(rawInput);
+
+  const vid = (
+    customVid ||
+    parsed.vid ||
+    (rawInput.toUpperCase().includes('0E8D') || rawInput.toUpperCase().includes('TECNO')
+      ? '0E8D'
+      : '0781')
+  ).toUpperCase();
+  const pid = (
+    customPid ||
+    parsed.pid ||
+    (rawInput.toUpperCase().includes('2008') || rawInput.toUpperCase().includes('TECNO')
+      ? '2008'
+      : '5591')
+  ).toUpperCase();
+  const serial = (
+    customSerial ||
+    parsed.serial ||
+    (rawInput.toUpperCase().includes('13161314A6041832') || rawInput.toUpperCase().includes('TECNO')
+      ? '13161314A6041832'
+      : `SN-${Math.abs(rawInput.length * 7919).toString().slice(0, 6)}`)
+  ).toUpperCase();
+
+  const authorised = isUsbDeviceAuthorized(vid, pid, serial);
+  if (authorised) {
+    return USB_DEVICES[0];
+  }
+
+  const displayName = rawInput;
+  const instanceId = `USB\\VID_${vid}&PID_${pid}\\${serial}`;
+
   return {
-    id: customId,
-    label: `${customId} (${isCorp ? 'Corporate Encrypted' : 'Commercial Unauthorised Pen Drive'})`,
-    authorised: isCorp,
-    riskPoints: isCorp ? 20 : 100,
-    vendor: isCorp ? 'Corporate Hardware Vault' : 'Commercial Retail USB Vendor',
-    vidPid: isCorp ? '0951:1666' : '0781:5591',
-    serialNumber: isCorp ? 'CORP-CUST-1001' : `COMM-${Math.abs(customId.length * 7919).toString().slice(0, 5)}`,
-    deviceCategory: isCorp ? 'Corporate Encrypted Vault' : 'Commercial Unauthorised Pen Drive',
+    id: displayName,
+    label: `${displayName} (VID: ${vid} | PID: ${pid} | Serial: ${serial}) — UNAUTHORISED`,
+    authorised: false,
+    accessStatusLabel: 'UNAUTHORISED',
+    riskPoints: 100,
+    vendor: 'External Unverified USB Vendor',
+    vid,
+    pid,
+    vidPid: `${vid}:${pid}`,
+    serialNumber: serial,
+    instanceId,
+    deviceCategory: 'Unauthorised USB Device',
     usbPort: 'USB3.2-Bus01-Port03',
-    capacityLabel: isCorp ? '16 GB Encrypted' : '64 GB Commercial',
+    capacityLabel: 'External Mass Storage',
+    mobileModel: displayName,
+    connectionMode: 'USB Removable Storage Interface',
+    osFirmware: 'Unverified External Firmware',
+    busSpeed: 'High-Speed 480 Mbps',
+    powerDraw: '250 mA Bus Powered',
   };
 }
