@@ -52,7 +52,6 @@ const FILE_OPTIONS: MockFileName[] = [
   'customer_cards.txt',
   'finance_report.txt',
   'hr_records.txt',
-  'accounts_288e8b18.csv',
 ];
 
 export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
@@ -74,6 +73,7 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
     initialSelectedFile || 'customer_cards.txt'
   );
   const [channel, setChannel] = useState<DLPChannel>('Email');
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string; size: number } | null>(null);
 
   const emailOptions = getEmailRecipientsForFile(selectedFile);
   const [selectedEmailRecipient, setSelectedEmailRecipient] = useState<string>(
@@ -93,8 +93,8 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
   }, [selectedFile]);
 
   const currentFile = MOCK_FILES[selectedFile];
-  const isLiveCsvSelected = selectedFile === 'accounts_288e8b18.csv' && Boolean(liveCsvExtractContent);
-  const effectiveSizeBytes = isLiveCsvSelected && liveCsvExtractBytes ? liveCsvExtractBytes : currentFile.sizeBytes;
+  const isLiveCsvSelected = false;
+  const effectiveSizeBytes = uploadedFile?.size ?? (isLiveCsvSelected && liveCsvExtractBytes ? liveCsvExtractBytes : currentFile.sizeBytes);
   const approvedDest = APPROVED_DESTINATIONS[selectedFile];
 
   const avgBytes =
@@ -111,8 +111,8 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
       channel,
       emailRecipientAddress: channel === 'Email' ? selectedEmailRecipient : undefined,
       usbDeviceId: channel === 'USB' ? selectedUsbDevice : undefined,
-      overrideContent: isLiveCsvSelected ? liveCsvExtractContent : undefined,
-      overrideSizeBytes: isLiveCsvSelected ? liveCsvExtractBytes : undefined,
+      overrideContent: uploadedFile?.content ?? (isLiveCsvSelected ? liveCsvExtractContent : undefined),
+      overrideSizeBytes: uploadedFile?.size ?? (isLiveCsvSelected ? liveCsvExtractBytes : undefined),
     });
   };
 
@@ -182,7 +182,7 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               Outbound Data Transfer Check
             </h2>
             <p className="text-xs text-emerald-900/70 mt-1">
-              Choose a file from <code className="font-mono text-emerald-800">mock_files/</code> or the live <code className="font-mono text-emerald-800">accounts_288e8b18.csv</code> banking extract, then test Email or USB delivery.
+              Choose a file from the sample list or upload your own text or CSV file to scan before sending.
             </p>
           </div>
 
@@ -206,6 +206,17 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
                 </option>
               ))}
             </select>
+            <label className="block rounded-lg border border-dashed border-emerald-700/40 bg-emerald-50/50 p-3 text-xs text-emerald-950">
+              <span className="font-semibold">Or upload a file to scan before sending</span>
+              <input type="file" className="mt-2 block w-full" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const content = await file.text();
+                setUploadedFile({ name: file.name, content, size: file.size });
+              }} />
+              {uploadedFile && <span className="mt-1 block">Selected: {uploadedFile.name} ({uploadedFile.size} bytes) <button type="button" className="underline" onClick={() => setUploadedFile(null)}>Clear</button></span>}
+              <span className="mt-1 block text-emerald-900/60">Text and CSV files are scanned in this demo. Upload contents stay in this browser.</span>
+            </label>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-emerald-900/70">
               <span>
@@ -493,8 +504,8 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
 
           <HighlightedFilePreview
             filename={selectedFile}
-            overrideContent={isLiveCsvSelected ? liveCsvExtractContent : undefined}
-            overrideSizeBytes={isLiveCsvSelected ? liveCsvExtractBytes : undefined}
+            overrideContent={uploadedFile?.content ?? (isLiveCsvSelected ? liveCsvExtractContent : undefined)}
+            overrideSizeBytes={uploadedFile?.size ?? (isLiveCsvSelected ? liveCsvExtractBytes : undefined)}
           />
         </div>
       </div>

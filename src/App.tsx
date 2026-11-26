@@ -15,9 +15,7 @@ import { armAlertsUserGesture, isVibrationSupported } from './utils/alertFeedbac
 import { STREAMLIT_APP_PY_CODE } from './utils/streamlitExport';
 import {
   AccountsDatasetSummary,
-  INITIAL_ACCOUNT_RECORDS,
   formatAccountsDlpExtract,
-  loadAccountsSampleFromCsv,
   summarizeAccountRecords,
 } from './utils/accountsDataset';
 import { EmployeeConsole } from './components/EmployeeConsole';
@@ -173,25 +171,11 @@ export default function App() {
 
   // Live Banking CSV Dataset state (public/assets/aistudio/accounts_288e8b18.csv)
   const [accountsDataset, setAccountsDataset] = useState<AccountsDatasetSummary>(() =>
-    summarizeAccountRecords(INITIAL_ACCOUNT_RECORDS, false)
+    summarizeAccountRecords([], false)
   );
-  const [datasetLoading, setDatasetLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    let active = true;
-    loadAccountsSampleFromCsv(250).then((summary) => {
-      if (active) {
-        setAccountsDataset(summary);
-        setDatasetLoading(false);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const liveCsvExtractContent = formatAccountsDlpExtract(accountsDataset.records, 14);
-  const liveCsvExtractBytes = new Blob([liveCsvExtractContent]).size;
+  const datasetLoading = false;
+  const liveCsvExtractContent = '';
+  const liveCsvExtractBytes = 0;
 
   // User gesture arming for vibration & Web Audio siren
   const [alertsArmed, setAlertsArmed] = useState<boolean>(false);
@@ -496,7 +480,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveRole('ANALYST')}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Open Analyst Dashboard ({pendingReviewCount})
                 </button>
@@ -506,7 +490,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveRole('EMPLOYEE')}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Open Employee View ({activeEmployee.name})
                 </button>
@@ -532,7 +516,7 @@ export default function App() {
               className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 alertsArmed
                   ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200 border border-emerald-300'
-                  : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                  : 'bg-cyan-300 hover:bg-cyan-200 text-slate-950'
               }`}
             >
               {alertsArmed ? 'Test Alert Pulse' : 'Enable alerts'}
@@ -641,33 +625,33 @@ export default function App() {
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto">
           {activeRole === 'LANDING' && (
-            <div className="max-w-5xl mx-auto space-y-8">
+            <div className="max-w-6xl mx-auto space-y-8 text-slate-100">
               {/* Hero Header */}
-              <div className="rounded-xl border border-emerald-900/12 bg-white p-6 md:p-8 space-y-4">
+              <div className="relative overflow-hidden rounded-3xl border border-cyan-300/20 bg-[#080b18] p-7 md:p-11 space-y-5 shadow-[0_0_55px_rgba(34,211,238,0.08)]">
                 <div className="text-xs font-mono font-semibold text-emerald-700">
                   Avishkar&apos;26 Problem Statement 17 · Cybersecurity &amp; FinTech DLP
                 </div>
                 <h1
-                  className="text-2xl md:text-4xl font-bold text-emerald-950 tracking-tight"
+                  className="relative text-4xl md:text-6xl font-bold text-white tracking-tight"
                   style={{ textWrap: 'balance' }}
                 >
-                  Data Exfiltration Detection &amp; Prevention Console
+                  Protect every move. Secure every asset.
                 </h1>
-                <p className="text-sm md:text-base text-emerald-900/75 max-w-3xl leading-relaxed">
+                <p className="relative text-sm md:text-base text-slate-300 max-w-3xl leading-relaxed">
                   Explainable two-channel Data Loss Prevention monitoring{' '}
                   <strong className="text-emerald-950">Email</strong> and{' '}
                   <strong className="text-emerald-950">USB</strong> transfers. Inspects corporate documents and your uploaded{' '}
                   <code className="font-mono text-emerald-800">accounts_288e8b18.csv</code> banking dataset for PII, verifies approved destinations and 3x volume baselines, and triggers instant visual and tactile alerts.
                 </p>
 
-                <div className="pt-2 flex flex-wrap items-center gap-3">
+                <div className="relative pt-2 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={handleEnableAlerts}
                     className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-2 ${
                       alertsArmed
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                        : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                        : 'bg-cyan-300 hover:bg-cyan-200 text-slate-950'
                     }`}
                   >
                     {alertsArmed ? (
@@ -688,7 +672,7 @@ export default function App() {
                     onClick={() => setActiveRole('DATASET')}
                     className="px-4 py-2.5 rounded-lg text-xs font-semibold bg-[#f6faf7] hover:bg-emerald-50 text-emerald-950 border border-emerald-900/15 transition-colors cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-2"
                   >
-                    <Database className="w-4 h-4 text-emerald-700" />
+                    <Database className="icon-3d icon-3d-motion w-4 h-4 text-cyan-300" />
                     Inspect Uploaded Banking CSV ({accountsDataset.totalKnownRows.toLocaleString()} rows)
                   </button>
                 </div>
@@ -700,7 +684,7 @@ export default function App() {
                 <div className="rounded-xl border border-emerald-900/12 bg-white p-6 flex flex-col justify-between space-y-6">
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-emerald-700">
-                      <UserCheck className="w-4 h-4" />
+                      <UserCheck className="icon-3d icon-3d-motion w-4 h-4" />
                       01. Employee Workstation
                     </div>
                     <h2 className="text-xl font-bold text-emerald-950">Employee Page</h2>
@@ -733,7 +717,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setActiveRole('EMPLOYEE')}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-cyan-300 hover:bg-cyan-200 text-slate-950 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
                     Enter Employee Page
                     <ArrowRight className="w-4 h-4" />
@@ -744,7 +728,7 @@ export default function App() {
                 <div className="rounded-xl border border-emerald-900/12 bg-white p-6 flex flex-col justify-between space-y-6">
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-emerald-700">
-                      <Shield className="w-4 h-4" />
+                      <Shield className="icon-3d icon-3d-motion w-4 h-4" />
                       02. SOC Analyst Console
                     </div>
                     <h2 className="text-xl font-bold text-emerald-950">
@@ -885,7 +869,7 @@ export default function App() {
               dataset={accountsDataset}
               loading={datasetLoading}
               onTestTransferWithCsv={() => {
-                setEmployeeInitialFile('accounts_288e8b18.csv');
+                setEmployeeInitialFile(undefined);
                 setActiveRole('EMPLOYEE');
               }}
             />
@@ -910,7 +894,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleDownloadStreamlitScript}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download app.py
