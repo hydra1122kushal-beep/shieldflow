@@ -1,11 +1,14 @@
 import {
   BuiltInMockFileName,
   EmailRecipientOption,
+  MOCK_EMPLOYEES,
   MOCK_FILES,
   MockFileName,
   UsbDeviceId,
+  UsbDeviceMetadata,
   getApprovedDestination,
   getEmailRecipientsForFile,
+  resolveUsbDeviceMetadata,
 } from '../data/mockFiles';
 import { analyzeUploadedFile } from './accountsDataset';
 
@@ -43,6 +46,8 @@ export interface DLPEvaluationResult {
   employeeId: string;
   employeeName: string;
   employeeRole: string;
+  workstationId: string;
+  workstationIp: string;
   filename: MockFileName;
   fileSizeBytes: number;
   userAvgBytesBefore: number;
@@ -50,6 +55,7 @@ export interface DLPEvaluationResult {
   channel: DLPChannel;
   destination: string;
   approvedDestination: string;
+  usbMetadata?: UsbDeviceMetadata;
   contentScore: number;
   behaviourScore: number;
   w1: number;
@@ -265,6 +271,8 @@ export function evaluateDLPTransfer(params: {
   employeeId: string;
   employeeName: string;
   employeeRole: string;
+  workstationId?: string;
+  workstationIp?: string;
   filename: MockFileName;
   channel: DLPChannel;
   emailRecipientAddress?: string;
@@ -283,6 +291,7 @@ export function evaluateDLPTransfer(params: {
     filename,
     channel,
     emailRecipientAddress,
+    usbDeviceId,
     userHistoryBytes,
     w1,
     w2,
@@ -290,6 +299,10 @@ export function evaluateDLPTransfer(params: {
     overrideSizeBytes,
     isImmediatePenDriveInsertion,
   } = params;
+
+  const empObj = MOCK_EMPLOYEES.find((e) => e.id === employeeId) || MOCK_EMPLOYEES[0];
+  const workstationId = params.workstationId || empObj.workstationId;
+  const workstationIp = params.workstationIp || empObj.workstationIp;
 
   const builtInFile = MOCK_FILES[filename as BuiltInMockFileName];
   const fileSizeBytes =
@@ -312,6 +325,7 @@ export function evaluateDLPTransfer(params: {
   let hardViolationTriggered = false;
   let hardViolationSummary: string | null = null;
   let destinationLabel = '';
+  let usbMetadata: UsbDeviceMetadata | undefined = undefined;
 
   if (channel === 'Email') {
     const recipients = getEmailRecipientsForFile(filename);
@@ -359,21 +373,31 @@ export function evaluateDLPTransfer(params: {
       });
     }
   } else {
-    // ZERO-TRUST USB CHANNEL ("SAY NO TO PENDRIVE")
-    // No authorised pen drive exists. Any Pen Drive insertion triggers an immediate CRITICAL BLOCK alert.
-    destinationLabel = 'PenDrive-USB-Inserted (Strictly Prohibited)';
-    behaviourRaw = 100;
-    hardViolationTriggered = true;
-    hardViolationSummary =
-      'SAY NO TO PENDRIVE — Zero-Trust Removable Media Policy: Authorised Pen Drive function disabled. Immediate hardware block & SOC alert triggered upon Pen Drive insertion!';
-    behaviourReasons.push({
-      category: 'VIOLATION_RULE',
-      points: 100,
-      isHardViolation: true,
-      text: isImmediatePenDriveInsertion
-        ? 'SAY NO TO PENDRIVE: Immediate alert triggered upon Pen Drive / USB insertion (0 authorised pen drives allowed)'
-        : 'SAY NO TO PENDRIVE: Attempted copy to removable Pen Drive / USB storage (strictly prohibited)',
-    });
+    // USB CHANNEL:
+    // Corporate encrypted USB is allowed (Risk 20), whereas Commercial (Unauthorised) Pen Drives are immediately DENIED (Risk 100)!
+    const chosenUsb = resolveUsbDeviceMetadata(usbDeviceId);
+    usbMetadata = chosenUsb;
+    destinationLabel = chosenUsb.id;
+    behaviourRaw += chosenUsb.riskPoints;
+
+    if (!chosenUsb.authorised) {
+      hardViolationTriggered = true;
+      hardViolationSummary = `COMMERCIAL PEN DRIVE DENIED: Unauthorised commercial USB (${chosenUsb.id} · VID:PID ${chosenUsb.vidPid} · Serial ${chosenUsb.serialNumber}) blocked immediately on workstation ${workstationId}`;
+      behaviourReasons.push({
+        category: 'VIOLATION_RULE',
+        points: chosenUsb.riskPoints,
+        isHardViolation: true,
+        text: isImmediatePenDriveInsertion
+          ? `Immediate hardware alert: Commercial (unauthorised) pen drive inserted (${chosenUsb.id} [${chosenUsb.vidPid}] on ${workstationId})`
+          : `Commercial (unauthorised) pen drive denied (${chosenUsb.id} · ${chosenUsb.vendor} [${chosenUsb.vidPid}])`,
+      });
+    } else {
+      behaviourReasons.push({
+        category: 'BEHAVIOUR',
+        points: chosenUsb.riskPoints,
+        text: `Copied to corporate encrypted USB vault (${chosenUsb.id} · ${chosenUsb.vidPid})`,
+      });
+    }
   }
 
   // Volume check: 3x or more user average
@@ -389,17 +413,12 @@ export function evaluateDLPTransfer(params: {
 
   const behaviourScore = Math.min(100, Math.round(behaviourRaw));
 
-  // Leak score = Content x W1 + Behaviour x W2 (or 100 on immediate Pen Drive hardware violation)
-  const rawWeightedScore =
-    channel === 'USB'
-      ? Math.max(85, Math.min(100, Math.round(contentScore * w1 + 100 * Math.max(0.85, w2))))
-      : Math.min(100, Math.round(contentScore * w1 + behaviourScore * w2));
+  // Leak score = Content x W1 + Behaviour x W2
+  const rawWeightedScore = Math.min(100, Math.round(contentScore * w1 + behaviourScore * w2));
 
   // Determine tier based on 0-30 Allow, 31-70 Review, 71-100 Block
   let tier: DLPActionTier = 'ALLOW';
-  if (channel === 'USB') {
-    tier = 'BLOCK';
-  } else if (rawWeightedScore >= 71) {
+  if (rawWeightedScore >= 71) {
     tier = 'BLOCK';
   } else if (rawWeightedScore >= 31) {
     tier = 'REVIEW';
@@ -407,17 +426,18 @@ export function evaluateDLPTransfer(params: {
     tier = 'ALLOW';
   }
 
-  // Enforce mandatory violation rules (Pen Drive or non-identified external email mismatch)
-  if (hardViolationTriggered && tier === 'ALLOW') {
-    tier = 'BLOCK';
-  } else if (hardViolationTriggered && tier === 'REVIEW' && rawWeightedScore >= 60) {
+  // Enforce mandatory violation rules: Commercial (unauthorised) Pen Drives are ALWAYS DENIED (BLOCK)
+  if (hardViolationTriggered) {
     tier = 'BLOCK';
   }
 
-  const finalLeakScore = rawWeightedScore;
+  const finalLeakScore =
+    hardViolationTriggered && channel === 'USB'
+      ? Math.max(75, rawWeightedScore)
+      : rawWeightedScore;
 
   let severity: DLPSeverity = 'LOW';
-  if (channel === 'USB' || finalLeakScore >= 75 || (hardViolationTriggered && finalLeakScore >= 50)) {
+  if (finalLeakScore >= 75 || (hardViolationTriggered && finalLeakScore >= 50)) {
     severity = 'CRITICAL';
   } else if (finalLeakScore >= 50 || hardViolationTriggered) {
     severity = 'HIGH';
@@ -458,6 +478,8 @@ export function evaluateDLPTransfer(params: {
     employeeId,
     employeeName,
     employeeRole,
+    workstationId,
+    workstationIp,
     filename,
     fileSizeBytes,
     userAvgBytesBefore,
@@ -465,6 +487,7 @@ export function evaluateDLPTransfer(params: {
     channel,
     destination: destinationLabel,
     approvedDestination,
+    usbMetadata,
     contentScore,
     behaviourScore,
     w1,

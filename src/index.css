@@ -9,8 +9,13 @@
 
   body {
     font-family: var(--font-sans);
-    background-color: #f6faf7;
-    color: #0d2116;
+    background-color: #f4f6fb;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.07) 0px, transparent 48%),
+      radial-gradient(at 100% 0%, rgba(13, 148, 136, 0.08) 0px, transparent 48%),
+      radial-gradient(at 50% 100%, rgba(225, 29, 72, 0.05) 0px, transparent 52%);
+    background-attachment: fixed;
+    color: #0f172a;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -24,16 +29,62 @@
   }
 }
 
-@keyframes dlpAlertFlash {
+/* 3D Perspective & Card Tilt Utilities */
+.perspective-stage {
+  perspective: 1400px;
+}
+
+.card-3d {
+  transform-style: preserve-3d;
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.25s ease;
+}
+
+.card-3d:hover {
+  transform: translateY(-4px) rotateX(1.8deg) rotateY(-1.2deg);
+  box-shadow:
+    0 20px 38px -12px rgba(15, 23, 42, 0.12),
+    0 4px 12px -2px rgba(79, 70, 229, 0.08);
+}
+
+.card-3d-subtle {
+  transform-style: preserve-3d;
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-3d-subtle:hover {
+  transform: translateY(-2px) translateZ(6px);
+  box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.1);
+}
+
+@keyframes float3DLogo {
   0%, 100% {
-    background-color: #b91c1c;
-    border-color: #fca5a5;
-    box-shadow: 0 10px 28px -6px rgba(185, 28, 28, 0.45);
+    transform: perspective(600px) rotateY(-8deg) rotateX(6deg) translateY(0px);
   }
   50% {
-    background-color: #dc2626;
+    transform: perspective(600px) rotateY(8deg) rotateX(-4deg) translateY(-2px);
+  }
+}
+
+.logo-3d-emblem {
+  animation: float3DLogo 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+@keyframes dlpAlertFlash {
+  0%, 100% {
+    background: linear-gradient(135deg, #9f1239 0%, #be123c 55%, #b91c1c 100%);
+    border-color: #fda4af;
+    box-shadow: 0 12px 32px -6px rgba(190, 18, 60, 0.48);
+  }
+  50% {
+    background: linear-gradient(135deg, #e11d48 0%, #dc2626 55%, #991b1b 100%);
     border-color: #ffffff;
-    box-shadow: 0 14px 36px -4px rgba(220, 38, 38, 0.65);
+    box-shadow: 0 16px 40px -4px rgba(225, 29, 72, 0.68);
   }
 }
 
@@ -42,9 +93,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dlp-flashing-banner {
-    animation: none;
-    background-color: #b91c1c;
-    border-color: #fca5a5;
+  .dlp-flashing-banner,
+  .logo-3d-emblem,
+  .card-3d,
+  .card-3d-subtle {
+    animation: none !important;
+    transform: none !important;
   }
 }

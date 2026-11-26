@@ -166,6 +166,8 @@ export interface EmployeeProfile {
   name: string;
   role: string;
   department: string;
+  workstationId: string;
+  workstationIp: string;
   defaultHistoryBytes: number[];
 }
 
@@ -175,13 +177,17 @@ export const MOCK_EMPLOYEES: EmployeeProfile[] = [
     name: 'Aarav',
     role: 'Finance Associate',
     department: 'Corporate Treasury',
-    defaultHistoryBytes: [420, 480, 390, 450], // Average: 435 B (so files >= 1305 B trigger >3x volume anomaly!)
+    workstationId: 'WS-FIN-104',
+    workstationIp: '10.24.18.104',
+    defaultHistoryBytes: [420, 480, 390, 450], // Average: 435 B
   },
   {
     id: 'meera',
     name: 'Meera',
     role: 'HR Specialist',
     department: 'People Operations',
+    workstationId: 'WS-HR-208',
+    workstationIp: '10.24.22.208',
     defaultHistoryBytes: [500, 420, 460, 540], // Average: 480 B
   },
   {
@@ -189,6 +195,8 @@ export const MOCK_EMPLOYEES: EmployeeProfile[] = [
     name: 'Rohan',
     role: 'Product Engineer',
     department: 'Core Payments',
+    workstationId: 'WS-ENG-312',
+    workstationIp: '10.24.16.312',
     defaultHistoryBytes: [380, 410, 440, 370], // Average: 400 B
   },
 ];
@@ -279,22 +287,95 @@ export function getEmailRecipientsForFile(filename: string): EmailRecipientOptio
   return options;
 }
 
-// ZERO-TRUST USB POLICY ("SAY NO TO PENDRIVE"):
-// No authorised Pen Drive exists. Any Pen Drive / USB insertion immediately triggers a 100-risk violation alert.
-export type UsbDeviceId = 'PenDrive-USB-Inserted (Strictly Prohibited)';
+// USB DEVICE OPTIONS:
+// USB input allows choosing or entering a USB device.
+// Corporate hardware-encrypted USB is allowed (Risk 20), whereas Commercial (Unauthorised) Pen Drives are DENIED immediately (Risk 100).
+export type UsbDeviceId =
+  | 'Registered-USB-01'
+  | 'SanDisk-Cruzer-Commercial-64GB'
+  | 'Kingston-DataTraveler-Commercial-32GB'
+  | 'Unknown-USB (unregistered)'
+  | string;
 
-export interface UsbDeviceOption {
+export interface UsbDeviceMetadata {
   id: UsbDeviceId;
   label: string;
-  authorised: false;
+  authorised: boolean;
   riskPoints: number;
+  vendor: string;
+  vidPid: string;
+  serialNumber: string;
+  deviceCategory: 'Corporate Encrypted Vault' | 'Commercial Unauthorised Pen Drive';
+  usbPort: string;
+  capacityLabel: string;
 }
 
-export const USB_DEVICES: UsbDeviceOption[] = [
+export const USB_DEVICES: UsbDeviceMetadata[] = [
   {
-    id: 'PenDrive-USB-Inserted (Strictly Prohibited)',
-    label: 'Removable USB Pen Drive — SAY NO TO PENDRIVE (Zero-Trust Block — Risk 100)',
+    id: 'Registered-USB-01',
+    label: 'Registered-USB-01 (IronKey Corporate AES-256 Encrypted USB — Risk 20)',
+    authorised: true,
+    riskPoints: 20,
+    vendor: 'Kingston IronKey Enterprise',
+    vidPid: '0951:1666',
+    serialNumber: 'IK-CORP-99201',
+    deviceCategory: 'Corporate Encrypted Vault',
+    usbPort: 'USB3.2-Bus01-Port01',
+    capacityLabel: '16 GB Encrypted',
+  },
+  {
+    id: 'SanDisk-Cruzer-Commercial-64GB',
+    label: 'SanDisk Cruzer Blade 64GB (Commercial Unauthorised Pen Drive — DENIED / Risk 100)',
     authorised: false,
     riskPoints: 100,
+    vendor: 'SanDisk Consumer Retail',
+    vidPid: '0781:5567',
+    serialNumber: 'SD-COMM-44819',
+    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    usbPort: 'USB3.2-Bus01-Port02',
+    capacityLabel: '64 GB FAT32',
+  },
+  {
+    id: 'Kingston-DataTraveler-Commercial-32GB',
+    label: 'Kingston DataTraveler Exodia 32GB (Commercial Unauthorised Pen Drive — DENIED / Risk 100)',
+    authorised: false,
+    riskPoints: 100,
+    vendor: 'Kingston Consumer Retail',
+    vidPid: '0951:1665',
+    serialNumber: 'KG-COMM-77310',
+    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    usbPort: 'USB3.2-Bus02-Port01',
+    capacityLabel: '32 GB exFAT',
+  },
+  {
+    id: 'Unknown-USB (unregistered)',
+    label: 'Unknown-USB (unregistered) (Unidentified Commercial Pen Drive — DENIED / Risk 100)',
+    authorised: false,
+    riskPoints: 100,
+    vendor: 'Generic USB Mass Storage',
+    vidPid: '058F:6387',
+    serialNumber: 'UNREG-USB-00492',
+    deviceCategory: 'Commercial Unauthorised Pen Drive',
+    usbPort: 'USB2.0-FrontPanel-Port01',
+    capacityLabel: '128 GB NTFS',
   },
 ];
+
+export function resolveUsbDeviceMetadata(usbDeviceId?: string): UsbDeviceMetadata {
+  const found = USB_DEVICES.find((u) => u.id === usbDeviceId);
+  if (found) return found;
+  const customId = (usbDeviceId || 'Custom-Commercial-PenDrive').trim();
+  const isCorp = /registered|corpvault|ironkey/i.test(customId) && !/unregistered|commercial/i.test(customId);
+  return {
+    id: customId,
+    label: `${customId} (${isCorp ? 'Corporate Encrypted' : 'Commercial Unauthorised Pen Drive'})`,
+    authorised: isCorp,
+    riskPoints: isCorp ? 20 : 100,
+    vendor: isCorp ? 'Corporate Hardware Vault' : 'Commercial Retail USB Vendor',
+    vidPid: isCorp ? '0951:1666' : '0781:5591',
+    serialNumber: isCorp ? 'CORP-CUST-1001' : `COMM-${Math.abs(customId.length * 7919).toString().slice(0, 5)}`,
+    deviceCategory: isCorp ? 'Corporate Encrypted Vault' : 'Commercial Unauthorised Pen Drive',
+    usbPort: 'USB3.2-Bus01-Port03',
+    capacityLabel: isCorp ? '16 GB Encrypted' : '64 GB Commercial',
+  };
+}
