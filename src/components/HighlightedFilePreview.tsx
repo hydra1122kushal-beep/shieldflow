@@ -1,25 +1,30 @@
 import React from 'react';
-import { MOCK_FILES, MockFileName } from '../data/mockFiles';
+import { BuiltInMockFileName, MOCK_FILES, MockFileName, getApprovedDestination } from '../data/mockFiles';
 import { analyzeFileContent } from '../utils/dlpEngine';
-import { FileText, ShieldCheck, AlertOctagon } from 'lucide-react';
+import { FileText, ShieldCheck, AlertOctagon, CheckCircle2 } from 'lucide-react';
 
 interface HighlightedFilePreviewProps {
   filename: MockFileName;
   overrideContent?: string;
   overrideSizeBytes?: number;
+  isUploadedFile?: boolean;
 }
 
 const COMBINED_HIGHLIGHT_REGEX =
-  /(\[CONFIDENTIAL\]|\[FINANCIAL_DATA\]|\[INTERNAL ONLY\]|\b(?:\d{4}[-\s]?){3}\d{4}\b|\b\d{3}-\d{2}-\d{4}\b|\bACCT-\d{8,12}\b|\bABA-\d{9}\b|\b\d+,\d+,\d+,(?:Current|Savings|Salary|Fixed Deposit|NRI),\d+(?:\.\d+)?|\+\d{1,2}-\d{3}-\d{3}-\d{4}\b|\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b)/g;
+  /(\[CONFIDENTIAL\]|\[FINANCIAL_DATA\]|\[INTERNAL ONLY\]|\b(?:\d{4}[-\s]?){3}\d{4}\b|\b\d{3}-\d{2}-\d{4}\b|\b[A-Z]{5}\d{4}[A-Z]\b|\b[2-9]\d{3}[\s-]\d{4}[\s-]\d{4}\b|\bACCT-\d{6,14}\b|\bABA-\d{9}\b|\b[A-Z]{4}0[A-Z0-9]{6}\b|\b\d+,\d+,\d+,(?:Current|Savings|Salary|Fixed Deposit|NRI),\d+(?:\.\d+)?|(?:\+\d{1,3}[-\s]?)?\(?\d{3}\)?[-\s]\d{3}[-\s]\d{4}\b|\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b)/g;
 
 export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
   filename,
   overrideContent,
   overrideSizeBytes,
+  isUploadedFile,
 }) => {
-  const file = MOCK_FILES[filename];
-  const contentToInspect = overrideContent ?? file.content;
-  const sizeBytes = overrideSizeBytes ?? file.sizeBytes;
+  const builtInFile = MOCK_FILES[filename as BuiltInMockFileName];
+  const contentToInspect = overrideContent ?? (builtInFile ? builtInFile.content : '');
+  const sizeBytes =
+    overrideSizeBytes ??
+    (overrideContent ? new Blob([overrideContent]).size : builtInFile ? builtInFile.sizeBytes : 0);
+  const approvedDest = getApprovedDestination(filename);
   const detection = analyzeFileContent(filename, contentToInspect);
   const parts = contentToInspect.split(COMBINED_HIGHLIGHT_REGEX);
 
@@ -29,20 +34,22 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
         <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-950/70">
           <FileText className="w-4 h-4 text-emerald-700 shrink-0" />
           <span className="font-mono font-semibold text-emerald-950">
-            {filename === 'accounts_288e8b18.csv'
-              ? 'accounts_288e8b18.csv'
-              : `mock_files/${file.filename}`}
+            {isUploadedFile ? `uploaded/${filename}` : `mock_files/${filename}`}
           </span>
           <span aria-hidden="true">·</span>
           <span className="font-mono tabular-nums">{sizeBytes.toLocaleString()} Bytes</span>
           <span aria-hidden="true">·</span>
           <span>
             Approved:{' '}
-            <strong className="font-mono text-emerald-800">{file.approvedDestination}</strong>
+            <strong className="font-mono text-emerald-800">{approvedDest}</strong>
           </span>
         </div>
 
-        <div className="text-xs font-mono tabular-nums">
+        <div className="text-xs font-mono tabular-nums flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Scan Verified
+          </span>
           {detection.contentScore === 0 ? (
             <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold">
               <ShieldCheck className="w-4 h-4" />
@@ -57,19 +64,27 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
         </div>
       </div>
 
-      {/* Findings strip — clean typographic separators */}
+      {/* Findings strip — Presidio + Regex + Pandas verification */}
       <div className="px-5 py-2.5 bg-white border-b border-emerald-900/10 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-emerald-950/70">
-        <span className="font-semibold text-emerald-950">Regex Scanner:</span>
+        <span className="font-semibold text-emerald-950">Presidio + Regex + Pandas Scanner:</span>
         {detection.tagsDetected.length > 0 && (
           <span className="text-red-700 font-mono font-medium">
             Tags: {detection.tagsDetected.join(', ')}
           </span>
         )}
+        {detection.sensitiveCsvColumns.length > 0 && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="text-red-700 font-mono font-medium">
+              Pandas Columns: [{detection.sensitiveCsvColumns.join(', ')}] ({detection.csvRowCount} rows)
+            </span>
+          </>
+        )}
         {detection.creditCardsCount > 0 && (
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              Credit Cards: {detection.creditCardsCount}
+              CREDIT_CARD: {detection.creditCardsCount}
             </span>
           </>
         )}
@@ -77,7 +92,23 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              SSNs: {detection.ssnCount}
+              US_SSN: {detection.ssnCount}
+            </span>
+          </>
+        )}
+        {detection.panCount > 0 && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="text-amber-800 font-mono tabular-nums">
+              IN_PAN: {detection.panCount}
+            </span>
+          </>
+        )}
+        {detection.aadhaarCount > 0 && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="text-amber-800 font-mono tabular-nums">
+              IN_AADHAAR: {detection.aadhaarCount}
             </span>
           </>
         )}
@@ -85,8 +116,8 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-amber-800 font-mono tabular-nums">
-              Bank Records: {detection.bankAccountCount}
-              {detection.routingNumberCount > 0 ? ` / ABA: ${detection.routingNumberCount}` : ''}
+              BANK_ACCOUNT: {detection.bankAccountCount}
+              {detection.routingNumberCount > 0 ? ` / ROUTING: ${detection.routingNumberCount}` : ''}
             </span>
           </>
         )}
@@ -94,7 +125,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-emerald-800 font-mono tabular-nums">
-              Phones: {detection.phoneCount}
+              PHONE_NUMBER: {detection.phoneCount}
             </span>
           </>
         )}
@@ -102,12 +133,12 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           <>
             <span aria-hidden="true">·</span>
             <span className="text-emerald-800 font-mono tabular-nums">
-              Emails: {detection.emailCount}
+              EMAIL_ADDRESS: {detection.emailCount}
             </span>
           </>
         )}
         {detection.contentReasons.length === 0 && (
-          <span className="text-emerald-700">No sensitive tags or PII patterns detected</span>
+          <span className="text-emerald-700">No sensitive tags, PII entities, or financial columns detected</span>
         )}
       </div>
 
@@ -132,8 +163,11 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
           if (
             /^\b(?:\d{4}[-\s]?){3}\d{4}\b$/.test(part) ||
             /^\b\d{3}-\d{2}-\d{4}\b$/.test(part) ||
-            /^\bACCT-\d{8,12}\b$/.test(part) ||
+            /^\b[A-Z]{5}\d{4}[A-Z]\b$/.test(part) ||
+            /^\b[2-9]\d{3}[\s-]\d{4}[\s-]\d{4}\b$/.test(part) ||
+            /^\bACCT-\d{6,14}\b$/.test(part) ||
             /^\bABA-\d{9}\b$/.test(part) ||
+            /^\b[A-Z]{4}0[A-Z0-9]{6}\b$/.test(part) ||
             /^\d+,\d+,\d+,(?:Current|Savings|Salary|Fixed Deposit|NRI),\d+(?:\.\d+)?$/.test(part)
           ) {
             return (
@@ -146,7 +180,7 @@ export const HighlightedFilePreview: React.FC<HighlightedFilePreviewProps> = ({
             );
           }
           if (
-            /^\+\d{1,2}-\d{3}-\d{3}-\d{4}\b$/.test(part) ||
+            /^(?:\+\d{1,3}[-\s]?)?\(?\d{3}\)?[-\s]\d{3}[-\s]\d{4}\b$/.test(part) ||
             /^\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b$/.test(part)
           ) {
             return (

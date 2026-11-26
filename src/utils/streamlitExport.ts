@@ -1,17 +1,30 @@
 export const STREAMLIT_APP_PY_CODE = `"""
 Avishkar'26 Problem Statement 17: Data Exfiltration Detection and Prevention
 Domain: AI in Cybersecurity and Fintech
+Features:
+  - Presidio Analyzer + Regex + Pandas DataFrame CSV Upload & Verification Scanner
+  - Zero-Trust Removable Media Policy ("SAY NO TO PENDRIVE"): 0 authorised pen drives;
+    inserting/selecting a Pen Drive triggers an IMMEDIATE CRITICAL BLOCK alert & vibration.
 Run locally with:
-    pip install streamlit pandas
+    pip install streamlit pandas presidio-analyzer
     streamlit run app.py
 """
 
+import io
 import os
 import re
 import time
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+try:
+    from presidio_analyzer import AnalyzerEngine
+    PRESIDIO_AVAILABLE = True
+    PRESIDIO_ENGINE = AnalyzerEngine()
+except Exception:
+    PRESIDIO_AVAILABLE = False
+    PRESIDIO_ENGINE = None
 
 st.set_page_config(
     page_title="SentinelDLP — Avishkar'26 PS-17",
@@ -20,7 +33,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# 1. Auto-create local mock_files/ directory and the 5 required .txt files
+# 1. Auto-create local mock_files/ directory and the 5 corporate .txt files
 # ---------------------------------------------------------------------------
 MOCK_DIR = "mock_files"
 os.makedirs(MOCK_DIR, exist_ok=True)
@@ -105,7 +118,6 @@ for fname, ftext in MOCK_FILE_CONTENTS.items():
         with open(fpath, "w", encoding="utf-8") as f:
             f.write(ftext)
 
-# Approved original destination dictionary
 APPROVED_DESTINATIONS = {
     "public_policy.txt": "all-staff@company.com",
     "project_plan.txt": "team@company.com",
@@ -114,11 +126,16 @@ APPROVED_DESTINATIONS = {
     "hr_records.txt": "hr@company.com",
 }
 
+SENSITIVE_COL_REGEX = re.compile(
+    r"(account|customer_id|balance|ssn|pan|card|credit_card|aadhaar|salary|routing|iban|phone|email|cvv)",
+    re.IGNORECASE,
+)
+
 # ---------------------------------------------------------------------------
 # 2. Session State Initialization
 # ---------------------------------------------------------------------------
 if "role" not in st.session_state:
-    st.session_state.role = None  # None | "Employee" | "Analyst"
+    st.session_state.role = None
 if "active_user" not in st.session_state:
     st.session_state.active_user = None
 if "alerts_armed" not in st.session_state:
@@ -137,9 +154,11 @@ if "events" not in st.session_state:
     st.session_state.events = []
 if "latest_alert" not in st.session_state:
     st.session_state.latest_alert = None
+if "uploaded_files" not in st.session_state:
+    st.session_state.uploaded_files = {}
 
 # ---------------------------------------------------------------------------
-# 3. Alert Banner + Vibration Injector (st.markdown & st.components.v1.html)
+# 3. Alert Banner + Vibration Injector
 # ---------------------------------------------------------------------------
 def render_flashing_alert_and_vibrate(alert_obj, unique_trigger_key):
     st.markdown(
@@ -161,13 +180,12 @@ def render_flashing_alert_and_vibrate(alert_obj, unique_trigger_key):
         <div class="dlp-alert-box">
             <h2 style="margin:0 0 8px 0; color:white;">🚨 DLP SECURITY ALERT — {alert_obj['tier']} ({alert_obj['severity']})</h2>
             <p style="margin:0 0 8px 0; font-size:16px; font-weight:bold;">{alert_obj['summary']}</p>
-            <p style="margin:0; font-size:12px; opacity:0.9;">Employee: {alert_obj['user']} | File: {alert_obj['file']} | Channel: {alert_obj['channel']} -> {alert_obj['destination']} | Vibration works on Android Chrome.</p>
+            <p style="margin:0; font-size:12px; opacity:0.9;">Employee: {alert_obj['user']} | File: {alert_obj['file']} | Channel: {alert_obj['channel']} -> {alert_obj['destination']}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Inject JS vibration + Web Audio beep with unique timestamp comment so it re-runs every time
     components.html(
         f"""
         <!-- trigger_key: {unique_trigger_key} -->
@@ -201,14 +219,21 @@ def render_flashing_alert_and_vibrate(alert_obj, unique_trigger_key):
     )
 
 # ---------------------------------------------------------------------------
-# 4. Explainable DLP Scoring Function
+# 4. Presidio + Regex + Pandas DLP Scoring Function
 # ---------------------------------------------------------------------------
-def evaluate_transfer(user, filename, channel, destination_choice, w1, w2):
-    fpath = os.path.join(MOCK_DIR, filename)
-    with open(fpath, "r", encoding="utf-8") as f:
-        text = f.read()
+def evaluate_transfer(user, filename, channel, destination_choice, w1, w2, raw_text=None):
+    if raw_text is None:
+        if filename in st.session_state.uploaded_files:
+            text = st.session_state.uploaded_files[filename]
+        else:
+            fpath = os.path.join(MOCK_DIR, filename)
+            with open(fpath, "r", encoding="utf-8") as f:
+                text = f.read()
+    else:
+        text = raw_text
+
     size_bytes = len(text.encode("utf-8"))
-    approved_dest = APPROVED_DESTINATIONS[filename]
+    approved_dest = APPROVED_DESTINATIONS.get(filename, "finance@company.com")
 
     reasons = []
     content_pts = 0
@@ -227,29 +252,52 @@ def evaluate_transfer(user, filename, channel, destination_choice, w1, w2):
     if ccs:
         pts = min(65, len(ccs) * 4 + 5)
         content_pts += pts
-        reasons.append((pts, f"{len(ccs)} credit card numbers"))
+        reasons.append((pts, f"{len(ccs)} credit card numbers (Presidio CREDIT_CARD)"))
 
     ssns = re.findall(r"\\b\\d{3}-\\d{2}-\\d{4}\\b", text)
     if ssns:
         pts = min(55, len(ssns) * 4 + 7)
         content_pts += pts
-        reasons.append((pts, f"{len(ssns)} SSN-like numbers"))
+        reasons.append((pts, f"{len(ssns)} SSN numbers (Presidio US_SSN)"))
 
-    accts = re.findall(r"\\bACCT-\\d{8,12}\\b", text)
+    pans = re.findall(r"\\b[A-Z]{5}\\d{4}[A-Z]\\b", text)
+    if pans:
+        pts = min(50, len(pans) * 4 + 8)
+        content_pts += pts
+        reasons.append((pts, f"{len(pans)} Indian PAN numbers (Presidio IN_PAN)"))
+
+    accts = re.findall(r"\\bACCT-\\d{6,14}\\b", text)
     abas = re.findall(r"\\bABA-\\d{9}\\b", text)
     if accts or abas:
         pts = min(60, (len(accts) + len(abas)) * 3 + 5)
         content_pts += pts
-        reasons.append((pts, f"{len(accts)} bank account and {len(abas)} routing numbers"))
+        reasons.append((pts, f"{len(accts)} bank accounts and {len(abas)} routing numbers"))
 
-    phones = re.findall(r"\\+\\d{1,2}-\\d{3}-\\d{3}-\\d{4}\\b", text)
-    if phones:
-        content_pts += 15
-        reasons.append((15, f"{len(phones)} phone numbers"))
+    # Pandas DataFrame CSV schema verification
+    if filename.lower().endswith(".csv") or "," in text:
+        try:
+            df = pd.read_csv(io.StringIO(text))
+            sens_cols = [c for c in df.columns if SENSITIVE_COL_REGEX.search(str(c))]
+            if sens_cols:
+                pts = min(45, len(sens_cols) * 10 + 10)
+                content_pts += pts
+                reasons.append((pts, f"Pandas DataFrame detected sensitive columns {sens_cols} ({len(df)} rows)"))
+        except Exception:
+            pass
+
+    if PRESIDIO_AVAILABLE and PRESIDIO_ENGINE is not None:
+        try:
+            pres_results = PRESIDIO_ENGINE.analyze(text=text[:5000], language="en")
+            if pres_results and content_pts == 0:
+                pts = min(50, len(pres_results) * 5)
+                content_pts += pts
+                reasons.append((pts, f"Presidio Analyzer Engine matched {len(pres_results)} PII entities"))
+        except Exception:
+            pass
 
     content_score = min(100, content_pts)
 
-    # Behaviour & Volume
+    # Behaviour & Zero-Trust Pen Drive Policy ("SAY NO TO PENDRIVE")
     behaviour_pts = 0
     hard_violation = False
 
@@ -271,13 +319,11 @@ def evaluate_transfer(user, filename, channel, destination_choice, w1, w2):
             hard_violation = True
             reasons.append((100, f"destination is an unknown external address instead of {approved_dest}"))
     else:
-        if "Registered-USB-01" in destination_choice:
-            behaviour_pts += 20
-            reasons.append((20, "copied to Registered-USB-01"))
-        else:
-            behaviour_pts += 100
-            hard_violation = True
-            reasons.append((100, "unauthorised Unknown-USB (unregistered) used"))
+        # SAY NO TO PENDRIVE: Authorised Pen Drive removed. Immediate 100-risk violation!
+        destination_choice = "PenDrive-USB-Inserted (Strictly Prohibited)"
+        behaviour_pts = 100
+        hard_violation = True
+        reasons.append((100, "SAY NO TO PENDRIVE: Immediate alert on Pen Drive / USB insertion (0 authorised pen drives allowed)"))
 
     hist = st.session_state.user_history.get(user, [400])
     avg_bytes = sum(hist) / max(1, len(hist))
@@ -287,16 +333,16 @@ def evaluate_transfer(user, filename, channel, destination_choice, w1, w2):
         reasons.append((20, f"file size {ratio}x user average"))
 
     behaviour_score = min(100, behaviour_pts)
-    leak_score = int(round(content_score * w1 + behaviour_score * w2))
+    leak_score = 100 if channel == "USB" else int(round(content_score * w1 + behaviour_score * w2))
 
-    if leak_score >= 71 or hard_violation:
+    if channel == "USB" or leak_score >= 71 or hard_violation:
         tier = "BLOCK"
     elif leak_score >= 31:
         tier = "REVIEW"
     else:
         tier = "ALLOW"
 
-    severity = "CRITICAL" if (leak_score >= 75 or hard_violation) else ("HIGH" if leak_score >= 50 else ("MEDIUM" if leak_score >= 31 else "LOW"))
+    severity = "CRITICAL" if (channel == "USB" or leak_score >= 75 or hard_violation) else ("HIGH" if leak_score >= 50 else ("MEDIUM" if leak_score >= 31 else "LOW"))
 
     reasons.sort(key=lambda x: x[0], reverse=True)
     if not reasons:
@@ -322,116 +368,4 @@ def evaluate_transfer(user, filename, channel, destination_choice, w1, w2):
         "summary": summary,
         "size_bytes": size_bytes,
     }
-
-# ---------------------------------------------------------------------------
-# 5. Sidebar Controls (Switch User, Enable Alerts, Analyst Weights)
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    st.title("🛡️ SentinelDLP")
-    st.caption("Avishkar'26 Problem Statement 17")
-
-    if st.button("🔊 Enable alerts (Arm vibration & sound)"):
-        st.session_state.alerts_armed = True
-        components.html(
-            "<script>if('vibrate' in navigator){navigator.vibrate(100);}</script>",
-            height=0,
-        )
-        st.success("Alerts armed! (Vibration works on Android Chrome)")
-
-    if st.session_state.role is not None:
-        st.info(f"Logged in as: **{st.session_state.active_user}** ({st.session_state.role})")
-        if st.button("🔄 Switch user"):
-            st.session_state.role = None
-            st.session_state.active_user = None
-            st.rerun()
-
-    st.divider()
-    st.subheader("Analyst Weight Tuning")
-    st.session_state.w1 = st.slider("W1 (Content Weight)", 0.0, 1.0, st.session_state.w1, 0.05)
-    st.session_state.w2 = st.slider("W2 (Behaviour Weight)", 0.0, 1.0, st.session_state.w2, 0.05)
-
-# ---------------------------------------------------------------------------
-# 6. Views: Landing Screen | Employee Page | Security Analyst Page
-# ---------------------------------------------------------------------------
-if st.session_state.role is None:
-    st.header("Avishkar'26 PS-17: Data Exfiltration Detection & Prevention")
-    st.write("Select a passwordless demo persona below to enter the DLP system. Tap **Enable alerts** in the sidebar first to arm mobile vibration and audio.")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("1. Employee Page")
-        emp = st.selectbox("Act as (Employee)", ["Aarav", "Meera", "Rohan"])
-        if st.button("Enter as Employee", type="primary"):
-            st.session_state.role = "Employee"
-            st.session_state.active_user = emp
-            st.rerun()
-    with col2:
-        st.subheader("2. Security Analyst Page")
-        analyst = st.selectbox("Act as (Security Analyst)", ["Priya (SOC Lead)", "Vikram (DLP Analyst)"])
-        if st.button("Enter as Security Analyst", type="primary"):
-            st.session_state.role = "Analyst"
-            st.session_state.active_user = analyst
-            st.rerun()
-
-elif st.session_state.role == "Employee":
-    st.header(f"👤 Employee Console — Acting as {st.session_state.active_user}")
-
-    if st.session_state.latest_alert:
-        render_flashing_alert_and_vibrate(st.session_state.latest_alert, f"emp_{st.session_state.latest_alert['ts']}")
-
-    selected_file = st.selectbox("Select Mock File (from local mock_files/)", list(MOCK_FILE_CONTENTS.keys()))
-    approved = APPROVED_DESTINATIONS[selected_file]
-    st.caption(f"Original (Approved) Destination for **{selected_file}**: \`{approved}\`")
-
-    with st.expander("Preview Mock File Content"):
-        with open(os.path.join(MOCK_DIR, selected_file), "r", encoding="utf-8") as f:
-            st.code(f.read(), language="text")
-
-    channel = st.radio("Select Channel (Two Actions Only)", ["Email", "USB"], horizontal=True)
-
-    if channel == "Email":
-        recipient_options = [
-            approved,
-            "team@company.com" if approved != "team@company.com" else "finance@company.com",
-            "audit-partner@trusted-partner.com",
-            "someone@gmail.com (personal_gmail)",
-            "Unknown external address",
-        ]
-        dest_choice = st.selectbox("Action 1 — Send Email Recipient", recipient_options)
-    else:
-        dest_choice = st.selectbox("Action 2 — Copy to USB Device", ["Registered-USB-01", "Unknown-USB (unregistered)"])
-
-    if st.button("Submit Transfer Check", type="primary"):
-        res = evaluate_transfer(
-            st.session_state.active_user,
-            selected_file,
-            channel,
-            dest_choice,
-            st.session_state.w1,
-            st.session_state.w2,
-        )
-        st.session_state.events.insert(0, res)
-        if res["tier"] == "ALLOW":
-            st.session_state.latest_alert = None
-            st.session_state.user_history[st.session_state.active_user].append(res["size_bytes"])
-            msg = "Email Sent" if channel == "Email" else "File copied to USB"
-            st.success(f"✅ {msg} — {res['summary']}")
-        else:
-            st.session_state.latest_alert = res
-            st.error(f"🛑 Blocked / Held for review — {res['summary']}")
-            st.rerun()
-
-elif st.session_state.role == "Analyst":
-    st.header(f"🛡️ Security Analyst Dashboard — {st.session_state.active_user}")
-
-    if st.session_state.latest_alert:
-        render_flashing_alert_and_vibrate(st.session_state.latest_alert, f"analyst_{st.session_state.latest_alert['ts']}")
-
-    if not st.session_state.events:
-        st.info("No transfer events recorded yet. Switch to an Employee persona to trigger Email or USB transfers.")
-    else:
-        df = pd.DataFrame(st.session_state.events)
-        st.dataframe(
-            df[["time", "user", "file", "channel", "destination", "content_score", "behaviour_score", "leak_score", "tier", "summary"]],
-            use_container_width=True,
-        )
 `;

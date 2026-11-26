@@ -10,12 +10,10 @@ def _seed_initial_events():
     seeds = [
         ("Aarav", "Email", "public_policy.txt", "all-staff@company.com", 435),
         ("Meera", "Email", "public_policy.txt", "all-staff@company.com", 480),
-        ("Rohan", "USB", "project_plan.txt", "Registered-USB-01", 400),
         ("Rohan", "Email", "project_plan.txt", "team@company.com", 400),
-        ("Aarav", "USB", "public_policy.txt", "Registered-USB-01", 435),
-        ("Meera", "USB", "public_policy.txt", "Registered-USB-01", 480),
         ("Aarav", "Email", "project_plan.txt", "team@company.com", 435),
         ("Rohan", "Email", "public_policy.txt", "all-staff@company.com", 400),
+        ("Rohan", "USB", "project_plan.txt", "PenDrive-USB-Inserted (Strictly Prohibited)", 400),
     ]
     return [evaluate_transfer(u, ch, fn, dst, avg, 0.5, 0.5) for u, ch, fn, dst, avg in seeds]
 

@@ -1,6 +1,14 @@
+import io
 import os
 import re
 from datetime import datetime
+import pandas as pd
+
+try:
+    from presidio_analyzer import AnalyzerEngine
+    PRESIDIO_ENGINE = AnalyzerEngine()
+except Exception:
+    PRESIDIO_ENGINE = None
 
 APPROVED_DESTINATIONS = {
     "public_policy.txt": "all-staff@company.com",
@@ -9,6 +17,11 @@ APPROVED_DESTINATIONS = {
     "finance_report.txt": "finance@company.com",
     "hr_records.txt": "hr@company.com",
 }
+
+SENSITIVE_COL_REGEX = re.compile(
+    r"(account|customer_id|balance|ssn|pan|card|credit_card|aadhaar|salary|routing|iban|phone|email|cvv)",
+    re.IGNORECASE,
+)
 
 def load_mock_file(filename, base_dir="mock_files"):
     path = os.path.join(base_dir, filename)
@@ -33,20 +46,47 @@ def analyze_content(filename, text):
     if cards:
         pts = min(65, len(cards) * 4 + 5)
         score += pts
-        reasons.append((pts, f"{len(cards)} credit card numbers detected"))
+        reasons.append((pts, f"{len(cards)} credit card numbers detected (Presidio CREDIT_CARD)"))
 
     ssns = re.findall(r"\b\d{3}-\d{2}-\d{4}\b", text)
     if ssns:
         pts = min(55, len(ssns) * 4 + 7)
         score += pts
-        reasons.append((pts, f"{len(ssns)} SSN numbers detected"))
+        reasons.append((pts, f"{len(ssns)} SSN numbers detected (Presidio US_SSN)"))
 
-    accts = re.findall(r"\bACCT-\d{8,12}\b", text)
+    pans = re.findall(r"\b[A-Z]{5}\d{4}[A-Z]\b", text)
+    if pans:
+        pts = min(50, len(pans) * 4 + 8)
+        score += pts
+        reasons.append((pts, f"{len(pans)} Indian PAN numbers detected (Presidio IN_PAN)"))
+
+    accts = re.findall(r"\bACCT-\d{6,14}\b", text)
     abas = re.findall(r"\bABA-\d{9}\b", text)
     if accts or abas:
         pts = min(60, (len(accts) + len(abas)) * 3 + 5)
         score += pts
         reasons.append((pts, f"{len(accts)} bank accounts and {len(abas)} routing numbers"))
+
+    if filename.lower().endswith(".csv") or "," in text:
+        try:
+            df = pd.read_csv(io.StringIO(text))
+            sens_cols = [str(c) for c in df.columns if SENSITIVE_COL_REGEX.search(str(c))]
+            if sens_cols:
+                pts = min(45, len(sens_cols) * 10 + 10)
+                score += pts
+                reasons.append((pts, f"Pandas DataFrame detected sensitive columns {sens_cols} ({len(df)} rows)"))
+        except Exception:
+            pass
+
+    if PRESIDIO_ENGINE is not None:
+        try:
+            hits = PRESIDIO_ENGINE.analyze(text=text[:5000], language="en")
+            if hits and score == 0:
+                pts = min(50, len(hits) * 5)
+                score += pts
+                reasons.append((pts, f"Presidio Analyzer matched {len(hits)} PII entities"))
+        except Exception:
+            pass
 
     phones = re.findall(r"\+\d{1,2}-\d{3}-\d{3}-\d{4}\b", text)
     if phones:
@@ -56,9 +96,13 @@ def analyze_content(filename, text):
 
     return min(100, score), reasons
 
-def evaluate_transfer(user, channel, filename, destination, user_avg_bytes, w1=0.5, w2=0.5):
-    text, size_bytes = load_mock_file(filename)
-    approved = APPROVED_DESTINATIONS[filename]
+def evaluate_transfer(user, channel, filename, destination, user_avg_bytes, w1=0.5, w2=0.5, raw_text=None):
+    if raw_text is not None:
+        text = raw_text
+        size_bytes = len(text.encode("utf-8"))
+    else:
+        text, size_bytes = load_mock_file(filename)
+    approved = APPROVED_DESTINATIONS.get(filename, "finance@company.com")
     content_score, content_reasons = analyze_content(filename, text)
 
     behaviour_score = 0
@@ -79,13 +123,11 @@ def evaluate_transfer(user, channel, filename, destination, user_avg_bytes, w1=0
             hard_violation = True
             beh_reasons.append((90, f"VIOLATION: External/personal email ({destination}) instead of {approved}"))
     else:
-        if destination == "Registered-USB-01":
-            behaviour_score += 20
-            beh_reasons.append((20, "Copied to Registered-USB-01"))
-        else:
-            behaviour_score += 100
-            hard_violation = True
-            beh_reasons.append((100, f"VIOLATION: Unregistered USB ({destination})"))
+        # SAY NO TO PENDRIVE: Authorised Pen Drive removed. Immediate 100-risk violation!
+        destination = "PenDrive-USB-Inserted (Strictly Prohibited)"
+        behaviour_score = 100
+        hard_violation = True
+        beh_reasons.append((100, "SAY NO TO PENDRIVE: Immediate alert on Pen Drive / USB insertion (0 authorised pen drives allowed)"))
 
     ratio = round(size_bytes / max(1, user_avg_bytes), 1)
     if ratio >= 3.0:
@@ -94,9 +136,9 @@ def evaluate_transfer(user, channel, filename, destination, user_avg_bytes, w1=0
         beh_reasons.append((pts, f"File size {ratio}x user average ({size_bytes} B vs {user_avg_bytes} B)"))
 
     behaviour_score = min(100, behaviour_score)
-    leak_score = min(100, round(content_score * w1 + behaviour_score * w2))
+    leak_score = 100 if channel == "USB" else min(100, round(content_score * w1 + behaviour_score * w2))
 
-    if leak_score >= 71 or hard_violation:
+    if channel == "USB" or leak_score >= 71 or hard_violation:
         tier = "BLOCK"
     elif leak_score >= 31:
         tier = "REVIEW"

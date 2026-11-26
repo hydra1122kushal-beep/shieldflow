@@ -1,35 +1,35 @@
-import {
-  INITIAL_ACCOUNT_RECORDS,
-  formatAccountsDlpExtract,
-} from '../utils/accountsDataset';
-
-export type MockFileName =
+export type BuiltInMockFileName =
   | 'public_policy.txt'
   | 'project_plan.txt'
   | 'customer_cards.txt'
   | 'finance_report.txt'
-  | 'hr_records.txt'
-  | 'accounts_288e8b18.csv';
+  | 'hr_records.txt';
+
+export type MockFileName = BuiltInMockFileName | string;
 
 export interface MockFileDefinition {
-  filename: MockFileName;
+  filename: string;
   label: string;
   approvedDestination: string;
   sizeBytes: number;
   content: string;
   description: string;
+  isUploaded?: boolean;
 }
 
-export const APPROVED_DESTINATIONS: Record<MockFileName, string> = {
+export const APPROVED_DESTINATIONS: Record<string, string> = {
   'public_policy.txt': 'all-staff@company.com',
   'project_plan.txt': 'team@company.com',
   'customer_cards.txt': 'finance@company.com',
   'finance_report.txt': 'finance@company.com',
   'hr_records.txt': 'hr@company.com',
-  'accounts_288e8b18.csv': 'finance@company.com',
 };
 
-export const MOCK_FILES: Record<MockFileName, MockFileDefinition> = {
+export function getApprovedDestination(filename: string): string {
+  return APPROVED_DESTINATIONS[filename] || 'finance@company.com';
+}
+
+export const MOCK_FILES: Record<BuiltInMockFileName, MockFileDefinition> = {
   'public_policy.txt': {
     filename: 'public_policy.txt',
     label: 'public_policy.txt (General Policy — No PII)',
@@ -159,14 +159,6 @@ EmpID: E-1052 | Name: Tanvi Radhakrishnan       | SSN: 490-61-7328 | Phone: +1-4
 Contains 12 full employee identity profiles including SSN, direct telephone, and corporate email records.
 Do not copy to removable USB media or transmit to personal email accounts.`,
   },
-  'accounts_288e8b18.csv': {
-    filename: 'accounts_288e8b18.csv',
-    label: 'accounts_288e8b18.csv ([FINANCIAL_DATA] Live Banking Accounts CSV — 95,001 rows)',
-    approvedDestination: 'finance@company.com',
-    sizeBytes: 3480,
-    description: 'Live customer banking accounts dataset extract tagged [FINANCIAL_DATA] & [CONFIDENTIAL] with balances, customer IDs, and branch codes.',
-    content: formatAccountsDlpExtract(INITIAL_ACCOUNT_RECORDS, 12),
-  },
 };
 
 export interface EmployeeProfile {
@@ -235,8 +227,8 @@ export interface EmailRecipientOption {
   isNonIdentifiedExternal: boolean;
 }
 
-export function getEmailRecipientsForFile(filename: MockFileName): EmailRecipientOption[] {
-  const approved = APPROVED_DESTINATIONS[filename];
+export function getEmailRecipientsForFile(filename: string): EmailRecipientOption[] {
+  const approved = getApprovedDestination(filename);
   const allInternal = [
     'finance@company.com',
     'team@company.com',
@@ -287,25 +279,21 @@ export function getEmailRecipientsForFile(filename: MockFileName): EmailRecipien
   return options;
 }
 
-export type UsbDeviceId = 'Registered-USB-01' | 'Unknown-USB (unregistered)';
+// ZERO-TRUST USB POLICY ("SAY NO TO PENDRIVE"):
+// No authorised Pen Drive exists. Any Pen Drive / USB insertion immediately triggers a 100-risk violation alert.
+export type UsbDeviceId = 'PenDrive-USB-Inserted (Strictly Prohibited)';
 
 export interface UsbDeviceOption {
   id: UsbDeviceId;
   label: string;
-  authorised: boolean;
+  authorised: false;
   riskPoints: number;
 }
 
 export const USB_DEVICES: UsbDeviceOption[] = [
   {
-    id: 'Registered-USB-01',
-    label: 'Registered-USB-01 (Authorised Corporate Hardware Encrypted USB — Risk 20)',
-    authorised: true,
-    riskPoints: 20,
-  },
-  {
-    id: 'Unknown-USB (unregistered)',
-    label: 'Unknown-USB (unregistered) (Unauthorised Removable Media — Risk 100)',
+    id: 'PenDrive-USB-Inserted (Strictly Prohibited)',
+    label: 'Removable USB Pen Drive — SAY NO TO PENDRIVE (Zero-Trust Block — Risk 100)',
     authorised: false,
     riskPoints: 100,
   },

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  BuiltInMockFileName,
   MOCK_ANALYSTS,
   MOCK_EMPLOYEES,
   MOCK_FILES,
@@ -14,9 +15,8 @@ import {
 import { armAlertsUserGesture, isVibrationSupported } from './utils/alertFeedback';
 import { STREAMLIT_APP_PY_CODE } from './utils/streamlitExport';
 import {
-  AccountsDatasetSummary,
-  formatAccountsDlpExtract,
-  summarizeAccountRecords,
+  UploadedDatasetScanReport,
+  analyzeUploadedFile,
 } from './utils/accountsDataset';
 import { EmployeeConsole } from './components/EmployeeConsole';
 import { AnalystDashboard } from './components/AnalystDashboard';
@@ -32,31 +32,34 @@ import {
   CheckCircle2,
   ArrowRight,
   Code2,
-  Database,
+  Upload,
+  ShieldBan,
 } from 'lucide-react';
 
 type ActiveRole = 'LANDING' | 'EMPLOYEE' | 'ANALYST' | 'DATASET';
 
 function createInitialDemoEvents(): DLPEvaluationResult[] {
-  // Seed 8 realistic safe past events across Email & Registered USB so charts & averages start populated
+  // Seed realistic past events: approved internal Email transfers + 1 blocked Pen Drive insertion ("Say No to Pendrive")
+  // Zero authorised USB devices exist.
   const seeds: Array<{
     employeeId: string;
     employeeName: string;
     employeeRole: string;
-    filename: MockFileName;
+    filename: BuiltInMockFileName;
     channel: DLPChannel;
     emailRecipientAddress?: string;
     usbDeviceId?: UsbDeviceId;
     userHistoryBytes: number[];
     offsetMin: number;
+    isImmediatePenDriveInsertion?: boolean;
   }> = [
     {
       employeeId: 'rohan',
       employeeName: 'Rohan',
       employeeRole: 'Product Engineer',
       filename: 'project_plan.txt',
-      channel: 'USB',
-      usbDeviceId: 'Registered-USB-01',
+      channel: 'Email',
+      emailRecipientAddress: 'team@company.com',
       userHistoryBytes: [380, 410, 440, 370],
       offsetMin: 4,
     },
@@ -84,21 +87,11 @@ function createInitialDemoEvents(): DLPEvaluationResult[] {
       employeeId: 'rohan',
       employeeName: 'Rohan',
       employeeRole: 'Product Engineer',
-      filename: 'project_plan.txt',
+      filename: 'public_policy.txt',
       channel: 'Email',
-      emailRecipientAddress: 'team@company.com',
+      emailRecipientAddress: 'all-staff@company.com',
       userHistoryBytes: [380, 410, 440, 370],
       offsetMin: 21,
-    },
-    {
-      employeeId: 'meera',
-      employeeName: 'Meera',
-      employeeRole: 'HR Specialist',
-      filename: 'public_policy.txt',
-      channel: 'USB',
-      usbDeviceId: 'Registered-USB-01',
-      userHistoryBytes: [500, 420, 460, 540],
-      offsetMin: 28,
     },
     {
       employeeId: 'aarav',
@@ -108,27 +101,28 @@ function createInitialDemoEvents(): DLPEvaluationResult[] {
       channel: 'Email',
       emailRecipientAddress: 'team@company.com',
       userHistoryBytes: [420, 480, 390, 450],
+      offsetMin: 28,
+    },
+    {
+      employeeId: 'meera',
+      employeeName: 'Meera',
+      employeeRole: 'HR Specialist',
+      filename: 'project_plan.txt',
+      channel: 'Email',
+      emailRecipientAddress: 'team@company.com',
+      userHistoryBytes: [500, 420, 460, 540],
       offsetMin: 35,
     },
     {
       employeeId: 'rohan',
       employeeName: 'Rohan',
       employeeRole: 'Product Engineer',
-      filename: 'public_policy.txt',
-      channel: 'Email',
-      emailRecipientAddress: 'all-staff@company.com',
+      filename: 'project_plan.txt',
+      channel: 'USB',
+      usbDeviceId: 'PenDrive-USB-Inserted (Strictly Prohibited)',
       userHistoryBytes: [380, 410, 440, 370],
       offsetMin: 44,
-    },
-    {
-      employeeId: 'aarav',
-      employeeName: 'Aarav',
-      employeeRole: 'Finance Associate',
-      filename: 'public_policy.txt',
-      channel: 'USB',
-      usbDeviceId: 'Registered-USB-01',
-      userHistoryBytes: [420, 480, 390, 450],
-      offsetMin: 52,
+      isImmediatePenDriveInsertion: true,
     },
   ];
 
@@ -145,6 +139,7 @@ function createInitialDemoEvents(): DLPEvaluationResult[] {
       userHistoryBytes: s.userHistoryBytes,
       w1: 0.5,
       w2: 0.5,
+      isImmediatePenDriveInsertion: s.isImmediatePenDriveInsertion,
     });
     const tsMs = baseMs - s.offsetMin * 60_000;
     const tsStr = new Date(tsMs).toLocaleTimeString([], {
@@ -169,13 +164,13 @@ export default function App() {
     undefined
   );
 
-  // Live Banking CSV Dataset state (public/assets/aistudio/accounts_288e8b18.csv)
-  const [accountsDataset, setAccountsDataset] = useState<AccountsDatasetSummary>(() =>
-    summarizeAccountRecords([], false)
-  );
-  const datasetLoading = false;
-  const liveCsvExtractContent = '';
-  const liveCsvExtractBytes = 0;
+  // User-uploaded CSV / Text file scan report (no pre-inserted CSV file)
+  const [uploadedDataset, setUploadedDataset] = useState<UploadedDatasetScanReport | null>(null);
+
+  const handleUploadFileContent = (filename: string, content: string, sizeBytes?: number) => {
+    const report = analyzeUploadedFile(filename, content, sizeBytes);
+    setUploadedDataset(report);
+  };
 
   // User gesture arming for vibration & Web Audio siren
   const [alertsArmed, setAlertsArmed] = useState<boolean>(false);
@@ -229,6 +224,7 @@ export default function App() {
     usbDeviceId?: UsbDeviceId;
     overrideContent?: string;
     overrideSizeBytes?: number;
+    isImmediatePenDriveInsertion?: boolean;
   }) => {
     const emp = activeEmployee;
     const currentHistory = userHistories[emp.id] || emp.defaultHistoryBytes;
@@ -246,6 +242,7 @@ export default function App() {
       w2,
       overrideContent: params.overrideContent,
       overrideSizeBytes: params.overrideSizeBytes,
+      isImmediatePenDriveInsertion: params.isImmediatePenDriveInsertion,
     });
 
     setEvents((prev) => [evaluation, ...prev]);
@@ -255,7 +252,9 @@ export default function App() {
     }));
 
     if (evaluation.tier === 'ALLOW' && !evaluation.hardViolationTriggered) {
-      const recordedBytes = params.overrideSizeBytes ?? MOCK_FILES[params.filename].sizeBytes;
+      const builtIn = MOCK_FILES[params.filename as BuiltInMockFileName];
+      const recordedBytes =
+        params.overrideSizeBytes ?? (builtIn ? builtIn.sizeBytes : evaluation.fileSizeBytes);
       setUserHistories((prev) => ({
         ...prev,
         [emp.id]: [...(prev[emp.id] || []), recordedBytes],
@@ -372,7 +371,7 @@ export default function App() {
                 : ''
             }`}
           >
-            Banking Dataset
+            CSV &amp; File Upload Scanner
           </button>
         </nav>
 
@@ -399,7 +398,7 @@ export default function App() {
             { id: 'LANDING', label: 'Overview' },
             { id: 'EMPLOYEE', label: 'Employee' },
             { id: 'ANALYST', label: `Analyst (${pendingReviewCount})` },
-            { id: 'DATASET', label: 'Banking CSV' },
+            { id: 'DATASET', label: 'CSV Upload Scanner' },
           ] as const
         ).map((tab) => (
           <button
@@ -431,13 +430,15 @@ export default function App() {
             ) : activeRole === 'DATASET' ? (
               <div>
                 <div className="text-xs font-mono font-semibold text-emerald-700">
-                  BANKING DATASET
+                  CSV &amp; FILE UPLOAD SCANNER
                 </div>
                 <div className="text-base font-bold text-emerald-950 mt-0.5">
-                  accounts_288e8b18.csv
+                  {uploadedDataset ? uploadedDataset.filename : 'Ready for File Upload'}
                 </div>
                 <div className="text-xs text-emerald-900/65">
-                  {accountsDataset.totalKnownRows.toLocaleString()} protected accounts
+                  {uploadedDataset
+                    ? `${uploadedDataset.totalRows.toLocaleString()} rows · Verified`
+                    : 'Presidio + Regex + Pandas Engine'}
                 </div>
               </div>
             ) : activeRole === 'EMPLOYEE' ? (
@@ -480,7 +481,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveRole('ANALYST')}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Open Analyst Dashboard ({pendingReviewCount})
                 </button>
@@ -490,12 +491,26 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveRole('EMPLOYEE')}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Open Employee View ({activeEmployee.name})
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Zero-Trust Pen Drive Policy Indicator */}
+          <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-red-900 flex items-center gap-1.5">
+                <ShieldBan className="w-3.5 h-3.5 text-red-700" />
+                Say No To Pendrive
+              </span>
+              <span className="font-mono text-xs font-bold text-red-700">ENFORCED</span>
+            </div>
+            <p className="text-xs text-red-900/80 leading-relaxed">
+              Authorised pen drives removed (0 allowed). Any USB / Pen Drive insertion triggers an immediate CRITICAL BLOCK alert.
+            </p>
           </div>
 
           {/* Mobile Vibration & Audio */}
@@ -516,7 +531,7 @@ export default function App() {
               className={`w-full py-2 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 alertsArmed
                   ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200 border border-emerald-300'
-                  : 'bg-cyan-300 hover:bg-cyan-200 text-slate-950'
+                  : 'bg-emerald-700 hover:bg-emerald-800 text-white'
               }`}
             >
               {alertsArmed ? 'Test Alert Pulse' : 'Enable alerts'}
@@ -600,7 +615,7 @@ export default function App() {
               Python Streamlit Export
             </div>
             <p className="text-xs text-emerald-900/65">
-              Download <code className="font-mono text-emerald-800">app.py</code> for local Streamlit execution.
+              Download <code className="font-mono text-emerald-800">app.py</code> with Presidio + Pandas CSV upload &amp; Say No to Pendrive policy.
             </p>
             <div className="flex gap-2">
               <button
@@ -625,33 +640,33 @@ export default function App() {
         {/* Main Content Area */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto">
           {activeRole === 'LANDING' && (
-            <div className="max-w-6xl mx-auto space-y-8 text-slate-100">
+            <div className="max-w-5xl mx-auto space-y-8">
               {/* Hero Header */}
-              <div className="relative overflow-hidden rounded-3xl border border-cyan-300/20 bg-[#080b18] p-7 md:p-11 space-y-5 shadow-[0_0_55px_rgba(34,211,238,0.08)]">
+              <div className="rounded-xl border border-emerald-900/12 bg-white p-6 md:p-8 space-y-4">
                 <div className="text-xs font-mono font-semibold text-emerald-700">
                   Avishkar&apos;26 Problem Statement 17 · Cybersecurity &amp; FinTech DLP
                 </div>
                 <h1
-                  className="relative text-4xl md:text-6xl font-bold text-white tracking-tight"
+                  className="text-2xl md:text-4xl font-bold text-emerald-950 tracking-tight"
                   style={{ textWrap: 'balance' }}
                 >
-                  Protect every move. Secure every asset.
+                  Data Exfiltration Detection &amp; Prevention Console
                 </h1>
-                <p className="relative text-sm md:text-base text-slate-300 max-w-3xl leading-relaxed">
-                  Explainable two-channel Data Loss Prevention monitoring{' '}
-                  <strong className="text-emerald-950">Email</strong> and{' '}
-                  <strong className="text-emerald-950">USB</strong> transfers. Inspects corporate documents and your uploaded{' '}
-                  <code className="font-mono text-emerald-800">accounts_288e8b18.csv</code> banking dataset for PII, verifies approved destinations and 3x volume baselines, and triggers instant visual and tactile alerts.
+                <p className="text-sm md:text-base text-emerald-900/75 max-w-3xl leading-relaxed">
+                  Explainable Data Loss Prevention featuring a live{' '}
+                  <strong className="text-emerald-950">CSV &amp; Document Upload Scanner</strong> powered by{' '}
+                  <strong className="text-emerald-950">Presidio entity recognizers, Regex, and Pandas DataFrame schema inspection</strong>, combined with a strict{' '}
+                  <strong className="text-red-700">&ldquo;Say No to Pendrive&rdquo; Zero-Trust USB Policy</strong> that triggers an immediate block alert and hardware vibration the moment any Pen Drive is inserted.
                 </p>
 
-                <div className="relative pt-2 flex flex-wrap items-center gap-3">
+                <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={handleEnableAlerts}
                     className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-2 ${
                       alertsArmed
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                        : 'bg-cyan-300 hover:bg-cyan-200 text-slate-950'
+                        : 'bg-emerald-700 hover:bg-emerald-800 text-white'
                     }`}
                   >
                     {alertsArmed ? (
@@ -672,8 +687,10 @@ export default function App() {
                     onClick={() => setActiveRole('DATASET')}
                     className="px-4 py-2.5 rounded-lg text-xs font-semibold bg-[#f6faf7] hover:bg-emerald-50 text-emerald-950 border border-emerald-900/15 transition-colors cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-2"
                   >
-                    <Database className="icon-3d icon-3d-motion w-4 h-4 text-cyan-300" />
-                    Inspect Uploaded Banking CSV ({accountsDataset.totalKnownRows.toLocaleString()} rows)
+                    <Upload className="w-4 h-4 text-emerald-700" />
+                    {uploadedDataset
+                      ? `Inspect Uploaded File: ${uploadedDataset.filename} (${uploadedDataset.totalRows} rows)`
+                      : 'Upload & Verify CSV / File (Presidio + Pandas)'}
                   </button>
                 </div>
               </div>
@@ -684,12 +701,12 @@ export default function App() {
                 <div className="rounded-xl border border-emerald-900/12 bg-white p-6 flex flex-col justify-between space-y-6">
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-emerald-700">
-                      <UserCheck className="icon-3d icon-3d-motion w-4 h-4" />
+                      <UserCheck className="w-4 h-4" />
                       01. Employee Workstation
                     </div>
                     <h2 className="text-xl font-bold text-emerald-950">Employee Page</h2>
                     <p className="text-xs text-emerald-900/70 leading-relaxed">
-                      Simulate sending corporate files or the live banking CSV extract via Email or copying to Registered / Unregistered USB storage.
+                      Upload custom CSV/text files or select corporate documents to test Email transfers, or test the immediate <strong>&ldquo;Say No to Pendrive&rdquo;</strong> alert triggered upon USB Pen Drive insertion.
                     </p>
 
                     <div className="pt-2 space-y-1.5">
@@ -717,7 +734,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setActiveRole('EMPLOYEE')}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-cyan-300 hover:bg-cyan-200 text-slate-950 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
                     Enter Employee Page
                     <ArrowRight className="w-4 h-4" />
@@ -728,14 +745,14 @@ export default function App() {
                 <div className="rounded-xl border border-emerald-900/12 bg-white p-6 flex flex-col justify-between space-y-6">
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-emerald-700">
-                      <Shield className="icon-3d icon-3d-motion w-4 h-4" />
+                      <Shield className="w-4 h-4" />
                       02. SOC Analyst Console
                     </div>
                     <h2 className="text-xl font-bold text-emerald-950">
                       Security Analyst Page
                     </h2>
                     <p className="text-xs text-emerald-900/70 leading-relaxed">
-                      Monitor colour-coded live egress feeds, inspect Email vs USB channel charts, tune W1/W2 scoring weights, and resolve quarantined transfers.
+                      Monitor colour-coded live egress feeds, inspect Email vs Pen Drive channel charts, tune W1/W2 scoring weights, and resolve quarantined transfers.
                     </p>
 
                     <div className="pt-2 space-y-1.5">
@@ -773,12 +790,13 @@ export default function App() {
 
               {/* Protected Files & Approved Destinations Map */}
               <div className="rounded-xl border border-emerald-900/12 bg-white overflow-hidden">
-                <div className="px-6 py-4 border-b border-emerald-900/10 bg-[#f9fcfa] flex items-center justify-between">
+                <div className="px-6 py-4 border-b border-emerald-900/10 bg-[#f9fcfa] flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-bold text-emerald-950">
-                    Protected Files &amp; Approved Destinations
+                    Protected Files &amp; Approved Destinations (+ Custom CSV Upload Support)
                   </h3>
                   <span className="text-xs font-mono text-emerald-800">
-                    {Object.keys(MOCK_FILES).length} Monitored Assets
+                    {Object.keys(MOCK_FILES).length} Built-in Assets ·{' '}
+                    {uploadedDataset ? '1 Uploaded File Active' : 'Upload Any CSV in Scanner'}
                   </span>
                 </div>
                 <div className="overflow-x-auto">
@@ -792,6 +810,23 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-emerald-900/8 font-mono">
+                      {uploadedDataset && (
+                        <tr className="bg-emerald-50/70 hover:bg-emerald-50 transition-colors">
+                          <td className="py-3 px-5 font-bold text-emerald-950">
+                            [UPLOADED] {uploadedDataset.filename}
+                          </td>
+                          <td className="py-3 px-4 text-emerald-700 font-semibold">
+                            finance@company.com
+                          </td>
+                          <td className="py-3 px-4 text-right text-emerald-900/80 tabular-nums">
+                            {uploadedDataset.fileSizeBytes} B
+                          </td>
+                          <td className="py-3 px-5 font-sans text-emerald-900/80">
+                            Verified via Presidio + Pandas ({uploadedDataset.totalRows} rows,{' '}
+                            {uploadedDataset.sensitiveColumnsDetected.length} sensitive columns)
+                          </td>
+                        </tr>
+                      )}
                       {Object.values(MOCK_FILES).map((f) => (
                         <tr key={f.filename} className="hover:bg-emerald-50/40 transition-colors">
                           <td className="py-3 px-5 font-semibold text-emerald-950">
@@ -827,8 +862,8 @@ export default function App() {
               latestAlert={latestAlert}
               lastEvaluationForUser={lastEvaluationByEmployee[activeEmployee.id] || null}
               initialSelectedFile={employeeInitialFile}
-              liveCsvExtractContent={liveCsvExtractContent}
-              liveCsvExtractBytes={liveCsvExtractBytes}
+              uploadedDataset={uploadedDataset}
+              onUploadFileContent={handleUploadFileContent}
               onSubmitTransfer={handleSubmitTransfer}
               onResetUserHistory={handleResetUserHistory}
               onDismissAlert={() => setLatestAlert(null)}
@@ -866,11 +901,17 @@ export default function App() {
 
           {activeRole === 'DATASET' && (
             <BankingDatasetPanel
-              dataset={accountsDataset}
-              loading={datasetLoading}
-              onTestTransferWithCsv={() => {
-                setEmployeeInitialFile(undefined);
-                setActiveRole('EMPLOYEE');
+              uploadedDataset={uploadedDataset}
+              onUploadFileContent={handleUploadFileContent}
+              onClearUploadedDataset={() => {
+                setUploadedDataset(null);
+                setEmployeeInitialFile('customer_cards.txt');
+              }}
+              onTestTransferWithUploaded={() => {
+                if (uploadedDataset) {
+                  setEmployeeInitialFile(uploadedDataset.filename);
+                  setActiveRole('EMPLOYEE');
+                }
               }}
             />
           )}
@@ -887,14 +928,14 @@ export default function App() {
                   Streamlit Python Script (<code className="font-mono text-emerald-700">app.py</code>)
                 </h3>
                 <p className="text-xs text-emerald-900/70">
-                  Self-contained Streamlit prototype with mock_files creation, scoring engine, and mobile vibration trigger.
+                  Self-contained Streamlit prototype with Presidio + Pandas CSV upload verification and Say No to Pendrive immediate alert.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleDownloadStreamlitScript}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-cyan-300 hover:bg-cyan-200 text-slate-950 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download app.py

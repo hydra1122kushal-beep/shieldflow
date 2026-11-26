@@ -1,6 +1,8 @@
+import io
+import pandas as pd
 import streamlit as st
 import plotly.express as px
-from detector import APPROVED_DESTINATIONS, evaluate_transfer, load_mock_file
+from detector import APPROVED_DESTINATIONS, analyze_content, evaluate_transfer, load_mock_file
 from alerts import render_alert_banner, trigger_vibration_and_sound
 from store import add_event, get_events_df, get_user_avg_bytes, reset_events
 
@@ -23,6 +25,8 @@ if "employee_name" not in st.session_state:
     st.session_state["employee_name"] = "Aarav"
 if "latest_alert" not in st.session_state:
     st.session_state["latest_alert"] = None
+if "uploaded_files" not in st.session_state:
+    st.session_state["uploaded_files"] = {}
 
 with st.sidebar:
     st.title("SentinelDLP")
@@ -33,12 +37,14 @@ with st.sidebar:
         trigger_vibration_and_sound("arm")
         st.success("Audio and vibration alerts armed.")
     st.divider()
+    st.error("🚫 SAY NO TO PENDRIVE: Authorised Pen Drive removed. Immediate alert on USB insertion.")
+    st.divider()
     w1 = st.slider("W1 (Content Weight)", 0.0, 1.0, 0.5, 0.05)
     w2 = st.slider("W2 (Behaviour Weight)", 0.0, 1.0, 0.5, 0.05)
 
 if st.session_state["role"] == "Landing":
     st.header("Data Exfiltration Detection & Prevention (DLP)")
-    st.caption("Avishkar'26 PS-17 · Select a role without password to test Email & USB exfiltration controls.")
+    st.caption("Avishkar'26 PS-17 · Presidio + Regex + Pandas CSV Upload Scanner & Say No To Pendrive Zero-Trust Policy.")
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Employee Page")
@@ -59,36 +65,67 @@ elif st.session_state["role"] == "Employee":
     if st.session_state["latest_alert"]:
         render_alert_banner(st.session_state["latest_alert"])
 
-    files = list(APPROVED_DESTINATIONS.keys())
+    uploaded = st.file_uploader("Upload CSV or Text File for Presidio + Pandas DLP Verification", type=["csv", "tsv", "txt"])
+    if uploaded is not None:
+        raw_content = uploaded.getvalue().decode("utf-8", errors="replace")
+        st.session_state["uploaded_files"][uploaded.name] = raw_content
+        score, reasons = analyze_content(uploaded.name, raw_content)
+        st.success(f"Verified '{uploaded.name}' ({len(raw_content)} bytes) — Content Risk Score: {score}/100")
+        if uploaded.name.lower().endswith(".csv"):
+            try:
+                df_up = pd.read_csv(io.StringIO(raw_content))
+                st.dataframe(df_up.head(20), use_container_width=True)
+            except Exception:
+                pass
+
+    files = list(st.session_state["uploaded_files"].keys()) + list(APPROVED_DESTINATIONS.keys())
     col_form, col_preview = st.columns(2)
     with col_form:
-        filename = st.selectbox("Select Mock File", files)
-        channel = st.radio("Select Channel", ["Email", "USB"], horizontal=True)
-        approved = APPROVED_DESTINATIONS[filename]
-        if channel == "Email":
-            dest = st.selectbox(
-                "Recipient Email",
-                [approved, "ops-audit@company.com", "audit-partner@trusted-partner.com", "someone@gmail.com", "unknown_drop@external-unverified.net"],
-            )
-        else:
-            dest = st.selectbox("Target USB Device", ["Registered-USB-01", "Unknown-USB (unregistered)"])
+        filename = st.selectbox("Select File (Uploaded or Mock)", files)
+        raw_override = st.session_state["uploaded_files"].get(filename)
+        approved = APPROVED_DESTINATIONS.get(filename, "finance@company.com")
 
-        if st.button("Submit", type="primary"):
+        if st.button("🚨 Insert Pen Drive (Say No To Pendrive — Immediate Alert)"):
             avg_b = get_user_avg_bytes(user)
-            result = evaluate_transfer(user, channel, filename, dest, avg_b, w1, w2)
+            result = evaluate_transfer(
+                user,
+                "USB",
+                filename,
+                "PenDrive-USB-Inserted (Strictly Prohibited)",
+                avg_b,
+                w1,
+                w2,
+                raw_text=raw_override,
+            )
+            add_event(result)
+            st.session_state["latest_alert"] = result
+            trigger_vibration_and_sound("usb_immediate")
+            st.rerun()
+
+        dest = st.selectbox(
+            "Recipient Email",
+            [approved, "ops-audit@company.com", "audit-partner@trusted-partner.com", "someone@gmail.com", "unknown_drop@external-unverified.net"],
+        )
+
+        if st.button("Submit Email Transfer", type="primary"):
+            avg_b = get_user_avg_bytes(user)
+            result = evaluate_transfer(user, "Email", filename, dest, avg_b, w1, w2, raw_text=raw_override)
             add_event(result)
             if result["action"] == "ALLOW":
                 st.session_state["latest_alert"] = None
-                st.success("Email Sent" if channel == "Email" else "File copied to USB")
+                st.success("Email Sent")
             else:
                 st.session_state["latest_alert"] = result
                 trigger_vibration_and_sound("emp")
                 st.rerun()
 
     with col_preview:
-        text, size_b = load_mock_file(filename)
+        if raw_override is not None:
+            text, size_b = raw_override, len(raw_override.encode("utf-8"))
+        else:
+            text, size_b = load_mock_file(filename)
         st.caption(f"{filename} ({size_b} bytes) · Approved: {approved}")
-        st.code(text, language="text")
+        st.code(text[:3000], language="text")
 
 else:
     st.header("Security Analyst Dashboard")

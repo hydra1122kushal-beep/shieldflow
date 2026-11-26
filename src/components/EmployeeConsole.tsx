@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  APPROVED_DESTINATIONS,
+  BuiltInMockFileName,
   EmployeeProfile,
   MOCK_FILES,
   MockFileName,
-  USB_DEVICES,
   UsbDeviceId,
+  getApprovedDestination,
   getEmailRecipientsForFile,
 } from '../data/mockFiles';
+import { UploadedDatasetScanReport } from '../utils/accountsDataset';
 import { DLPChannel, DLPEvaluationResult } from '../utils/dlpEngine';
 import { HighlightedFilePreview } from './HighlightedFilePreview';
 import { FlashingAlertBanner } from './FlashingAlertBanner';
@@ -21,6 +22,8 @@ import {
   RotateCcw,
   FileText,
   Scale,
+  Upload,
+  ShieldBan,
 } from 'lucide-react';
 
 interface EmployeeConsoleProps {
@@ -32,8 +35,8 @@ interface EmployeeConsoleProps {
   latestAlert: DLPEvaluationResult | null;
   lastEvaluationForUser: DLPEvaluationResult | null;
   initialSelectedFile?: MockFileName;
-  liveCsvExtractContent?: string;
-  liveCsvExtractBytes?: number;
+  uploadedDataset: UploadedDatasetScanReport | null;
+  onUploadFileContent: (filename: string, content: string, sizeBytes?: number) => void;
   onSubmitTransfer: (params: {
     filename: MockFileName;
     channel: DLPChannel;
@@ -41,12 +44,13 @@ interface EmployeeConsoleProps {
     usbDeviceId?: UsbDeviceId;
     overrideContent?: string;
     overrideSizeBytes?: number;
+    isImmediatePenDriveInsertion?: boolean;
   }) => void;
   onResetUserHistory: (employeeId: string) => void;
   onDismissAlert: () => void;
 }
 
-const FILE_OPTIONS: MockFileName[] = [
+const BUILT_IN_FILE_OPTIONS: BuiltInMockFileName[] = [
   'public_policy.txt',
   'project_plan.txt',
   'customer_cards.txt',
@@ -63,8 +67,8 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
   latestAlert,
   lastEvaluationForUser,
   initialSelectedFile,
-  liveCsvExtractContent,
-  liveCsvExtractBytes,
+  uploadedDataset,
+  onUploadFileContent,
   onSubmitTransfer,
   onResetUserHistory,
   onDismissAlert,
@@ -73,13 +77,12 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
     initialSelectedFile || 'customer_cards.txt'
   );
   const [channel, setChannel] = useState<DLPChannel>('Email');
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string; size: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const emailOptions = getEmailRecipientsForFile(selectedFile);
   const [selectedEmailRecipient, setSelectedEmailRecipient] = useState<string>(
     emailOptions[0].address
   );
-  const [selectedUsbDevice, setSelectedUsbDevice] = useState<UsbDeviceId>('Registered-USB-01');
 
   useEffect(() => {
     if (initialSelectedFile) {
@@ -92,10 +95,21 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
     setSelectedEmailRecipient(newOptions[0].address);
   }, [selectedFile]);
 
-  const currentFile = MOCK_FILES[selectedFile];
-  const isLiveCsvSelected = false;
-  const effectiveSizeBytes = uploadedFile?.size ?? (isLiveCsvSelected && liveCsvExtractBytes ? liveCsvExtractBytes : currentFile.sizeBytes);
-  const approvedDest = APPROVED_DESTINATIONS[selectedFile];
+  const isUploadedSelected =
+    Boolean(uploadedDataset) && selectedFile === uploadedDataset?.filename;
+
+  const builtInFile = MOCK_FILES[selectedFile as BuiltInMockFileName];
+  const effectiveContent = isUploadedSelected
+    ? uploadedDataset!.rawContent
+    : builtInFile
+    ? builtInFile.content
+    : '';
+  const effectiveSizeBytes = isUploadedSelected
+    ? uploadedDataset!.fileSizeBytes
+    : builtInFile
+    ? builtInFile.sizeBytes
+    : 420;
+  const approvedDest = getApprovedDestination(selectedFile);
 
   const avgBytes =
     userHistoryBytes.length > 0
@@ -104,15 +118,66 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
   const projectedRatio = Number((effectiveSizeBytes / Math.max(1, avgBytes)).toFixed(1));
   const isVolumeAnomaly = projectedRatio >= 3.0;
 
+  // Trigger IMMEDIATE CRITICAL ALERT as soon as a Pen Drive is inserted / selected
+  const triggerImmediatePenDriveInsertionAlert = (targetFilename?: MockFileName) => {
+    const fileToUse = targetFilename || selectedFile;
+    const isUploaded = Boolean(uploadedDataset) && fileToUse === uploadedDataset?.filename;
+    setChannel('USB');
+    onSubmitTransfer({
+      filename: fileToUse,
+      channel: 'USB',
+      usbDeviceId: 'PenDrive-USB-Inserted (Strictly Prohibited)',
+      overrideContent: isUploaded ? uploadedDataset?.rawContent : undefined,
+      overrideSizeBytes: isUploaded ? uploadedDataset?.fileSizeBytes : undefined,
+      isImmediatePenDriveInsertion: true,
+    });
+  };
+
+  // Also listen for real hardware WebUSB connect events if browser supports navigator.usb
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      usb?: {
+        addEventListener?: (type: string, listener: () => void) => void;
+        removeEventListener?: (type: string, listener: () => void) => void;
+      };
+    };
+    if (!nav.usb || !nav.usb.addEventListener) return;
+
+    const handleHardwareUsbConnect = () => {
+      triggerImmediatePenDriveInsertionAlert();
+    };
+    nav.usb.addEventListener('connect', handleHardwareUsbConnect);
+    return () => {
+      nav.usb?.removeEventListener?.('connect', handleHardwareUsbConnect);
+    };
+  });
+
+  const handleLocalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = typeof ev.target?.result === 'string' ? ev.target.result : '';
+      if (content.trim()) {
+        onUploadFileContent(file.name, content, file.size);
+        setSelectedFile(file.name);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmitTransfer({
       filename: selectedFile,
       channel,
       emailRecipientAddress: channel === 'Email' ? selectedEmailRecipient : undefined,
-      usbDeviceId: channel === 'USB' ? selectedUsbDevice : undefined,
-      overrideContent: uploadedFile?.content ?? (isLiveCsvSelected ? liveCsvExtractContent : undefined),
-      overrideSizeBytes: uploadedFile?.size ?? (isLiveCsvSelected ? liveCsvExtractBytes : undefined),
+      usbDeviceId:
+        channel === 'USB' ? 'PenDrive-USB-Inserted (Strictly Prohibited)' : undefined,
+      overrideContent: isUploadedSelected ? uploadedDataset?.rawContent : undefined,
+      overrideSizeBytes: isUploadedSelected ? uploadedDataset?.fileSizeBytes : undefined,
+      isImmediatePenDriveInsertion: channel === 'USB',
     });
   };
 
@@ -177,13 +242,31 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
           onSubmit={handleSubmit}
           className="lg:col-span-6 rounded-xl border border-emerald-900/12 bg-white p-6 space-y-6"
         >
-          <div className="border-b border-emerald-900/10 pb-4">
-            <h2 className="text-lg font-bold text-emerald-950">
-              Outbound Data Transfer Check
-            </h2>
-            <p className="text-xs text-emerald-900/70 mt-1">
-              Choose a file from the sample list or upload your own text or CSV file to scan before sending.
-            </p>
+          <div className="border-b border-emerald-900/10 pb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-emerald-950">
+                Outbound Data Transfer Check
+              </h2>
+              <p className="text-xs text-emerald-900/70 mt-1">
+                Select a file from <code className="font-mono text-emerald-800">mock_files/</code> or upload your own CSV/text file for Presidio + Regex + Pandas scanning.
+              </p>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.tsv,.txt,.json,.log"
+              onChange={handleLocalFileUpload}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Upload className="w-3.5 h-3.5 text-emerald-700" />
+              Upload CSV / File
+            </button>
           </div>
 
           {/* 1. File Select */}
@@ -192,7 +275,7 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               htmlFor="mock-file-select"
               className="block text-xs font-semibold text-emerald-950"
             >
-              1. Select Protected File
+              1. Select Protected File (or Uploaded CSV)
             </label>
             <select
               id="mock-file-select"
@@ -200,23 +283,18 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               onChange={(e) => setSelectedFile(e.target.value as MockFileName)}
               className="w-full rounded-lg bg-[#f9fcfa] border border-emerald-900/20 px-3.5 py-2.5 text-sm text-emerald-950 font-mono focus:outline-none focus:border-emerald-700"
             >
-              {FILE_OPTIONS.map((fname) => (
+              {uploadedDataset && (
+                <option value={uploadedDataset.filename}>
+                  [UPLOADED] {uploadedDataset.filename} ({uploadedDataset.totalRows} rows) —{' '}
+                  {uploadedDataset.fileSizeBytes} B
+                </option>
+              )}
+              {BUILT_IN_FILE_OPTIONS.map((fname) => (
                 <option key={fname} value={fname}>
                   {MOCK_FILES[fname].label} — {MOCK_FILES[fname].sizeBytes} B
                 </option>
               ))}
             </select>
-            <label className="block rounded-lg border border-dashed border-emerald-700/40 bg-emerald-50/50 p-3 text-xs text-emerald-950">
-              <span className="font-semibold">Or upload a file to scan before sending</span>
-              <input type="file" className="mt-2 block w-full" onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const content = await file.text();
-                setUploadedFile({ name: file.name, content, size: file.size });
-              }} />
-              {uploadedFile && <span className="mt-1 block">Selected: {uploadedFile.name} ({uploadedFile.size} bytes) <button type="button" className="underline" onClick={() => setUploadedFile(null)}>Clear</button></span>}
-              <span className="mt-1 block text-emerald-900/60">Text and CSV files are scanned in this demo. Upload contents stay in this browser.</span>
-            </label>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-emerald-900/70">
               <span>
@@ -229,10 +307,10 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
             </div>
           </div>
 
-          {/* 2. Channel Toggle */}
+          {/* 2. Channel Toggle — Selecting Pen Drive / USB immediately fires "Say No to Pendrive" alert */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-emerald-950">
-              2. Select Exfiltration Channel
+              2. Select Exfiltration Channel (Pen Drive Insertion Triggers Immediate Alert)
             </span>
             <div className="grid grid-cols-2 gap-3 p-1 bg-[#f4f8f5] rounded-lg border border-emerald-900/10">
               <button
@@ -249,20 +327,20 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setChannel('USB')}
+                onClick={() => triggerImmediatePenDriveInsertionAlert()}
                 className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   channel === 'USB'
-                    ? 'bg-emerald-700 text-white'
-                    : 'text-emerald-900/75 hover:text-emerald-950 hover:bg-white/60'
+                    ? 'bg-red-700 text-white'
+                    : 'text-red-800 bg-red-50/70 hover:bg-red-100 border border-red-200'
                 }`}
               >
                 <Usb className="w-4 h-4" />
-                Copy to USB
+                Insert Pen Drive (No USB)
               </button>
             </div>
           </div>
 
-          {/* 3. Destination Select */}
+          {/* 3. Destination Select or SAY NO TO PENDRIVE Lockdown Card */}
           {channel === 'Email' ? (
             <div className="space-y-2">
               <label
@@ -288,28 +366,34 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              <label
-                htmlFor="usb-device-select"
-                className="block text-xs font-semibold text-emerald-950"
-              >
-                3. Target USB Removable Storage Device
-              </label>
-              <select
-                id="usb-device-select"
-                value={selectedUsbDevice}
-                onChange={(e) => setSelectedUsbDevice(e.target.value as UsbDeviceId)}
-                className="w-full rounded-lg bg-[#f9fcfa] border border-emerald-900/20 px-3.5 py-2.5 text-sm text-emerald-950 font-mono focus:outline-none focus:border-emerald-700"
-              >
-                {USB_DEVICES.map((usb) => (
-                  <option key={usb.id} value={usb.id}>
-                    {usb.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-emerald-900/65">
-                Using <code className="font-mono text-red-700">Unknown-USB (unregistered)</code> always raises an immediate violation alert and vibrates.
-              </p>
+            <div className="rounded-xl border-2 border-red-300 bg-red-50/80 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-red-600 text-white shrink-0">
+                  <ShieldBan className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-mono font-bold text-red-800 uppercase tracking-wide">
+                    ZERO-TRUST REMOVABLE MEDIA POLICY · 0 AUTHORISED PEN DRIVES
+                  </div>
+                  <h3 className="text-base font-bold text-red-950">
+                    SAY NO TO PENDRIVE — Immediate Alert Triggered on Insertion
+                  </h3>
+                  <p className="text-xs text-red-900/85 leading-relaxed">
+                    The authorised pen drive function has been permanently disabled. Inserting any USB Pen Drive immediately triggers a <strong>CRITICAL BLOCK (Risk 100)</strong>, sounds the hardware siren, vibrates the device, and logs the incident to the SOC Analyst live feed.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-red-200 text-xs font-mono text-red-900">
+                <span>Detected Port Event: PenDrive-USB-Inserted</span>
+                <button
+                  type="button"
+                  onClick={() => triggerImmediatePenDriveInsertionAlert()}
+                  className="px-3 py-1.5 rounded-lg font-sans font-semibold bg-red-700 hover:bg-red-800 text-white transition-colors cursor-pointer"
+                >
+                  Re-Trigger Pen Drive Insertion Alert
+                </button>
+              </div>
             </div>
           )}
 
@@ -355,45 +439,28 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedFile('accounts_288e8b18.csv');
-                  setChannel('Email');
-                  setSelectedEmailRecipient('someone@gmail.com');
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 transition-colors cursor-pointer"
-              >
-                Bank CSV to Gmail (Block)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   setSelectedFile('hr_records.txt');
-                  setChannel('USB');
-                  setSelectedUsbDevice('Unknown-USB (unregistered)');
+                  triggerImmediatePenDriveInsertionAlert('hr_records.txt');
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer"
               >
-                HR Records to Unknown-USB (Block)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedFile('project_plan.txt');
-                  setChannel('USB');
-                  setSelectedUsbDevice('Registered-USB-01');
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
-              >
-                Plan to Registered-USB (Allow)
+                Insert Pen Drive — Say No to Pendrive (Immediate Block Alert)
               </button>
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-lg font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              channel === 'USB'
+                ? 'bg-red-700 hover:bg-red-800 text-white'
+                : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+            }`}
           >
             <Send className="w-4 h-4" />
-            Submit Transfer Check
+            {channel === 'USB'
+              ? 'Pen Drive Prohibited — Re-Verify Block Alert'
+              : 'Submit Email Transfer Check'}
           </button>
         </form>
 
@@ -432,11 +499,11 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
                       }`}
                     >
                       {lastEvaluationForUser.tier === 'ALLOW'
-                        ? lastEvaluationForUser.channel === 'Email'
-                          ? 'Email Sent'
-                          : 'File copied to USB'
+                        ? 'Email Sent'
                         : lastEvaluationForUser.tier === 'REVIEW'
                         ? 'Held for Review (Quarantined)'
+                        : lastEvaluationForUser.channel === 'USB'
+                        ? 'Blocked — SAY NO TO PENDRIVE'
                         : 'Blocked (Transfer Denied)'}
                     </h3>
                   </div>
@@ -497,15 +564,16 @@ export const EmployeeConsole: React.FC<EmployeeConsoleProps> = ({
             <div className="rounded-xl border border-emerald-900/12 bg-white p-5 flex items-center gap-3 text-emerald-900/75 text-sm">
               <FileText className="w-5 h-5 text-emerald-700 shrink-0" />
               <span>
-                Select a file and destination on the left, then click <strong>Submit Transfer Check</strong> to evaluate content, destination behaviour, and volume baselines.
+                Select or upload a file on the left, then test an Email transfer or click <strong>Insert Pen Drive (No USB)</strong> to verify immediate Pen Drive blocking.
               </span>
             </div>
           )}
 
           <HighlightedFilePreview
             filename={selectedFile}
-            overrideContent={uploadedFile?.content ?? (isLiveCsvSelected ? liveCsvExtractContent : undefined)}
-            overrideSizeBytes={uploadedFile?.size ?? (isLiveCsvSelected ? liveCsvExtractBytes : undefined)}
+            overrideContent={isUploadedSelected ? effectiveContent : undefined}
+            overrideSizeBytes={isUploadedSelected ? effectiveSizeBytes : undefined}
+            isUploadedFile={isUploadedSelected}
           />
         </div>
       </div>
